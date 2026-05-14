@@ -226,11 +226,19 @@ var COLS={co:'companies',pu:'purifiers',ma:'maintenances',te:'technicians'};
 var db=null;
 var FB_OK=false;
 
+var _FB_DEFAULT={
+  apiKey:"AIzaSyCdRdPIM7fjV-5prMCHs_3eYqS5aARSu5I",
+  authDomain:"aquapure-9100b.firebaseapp.com",
+  projectId:"aquapure-9100b",
+  storageBucket:"aquapure-9100b.firebasestorage.app",
+  messagingSenderId:"132328899335",
+  appId:"1:132328899335:web:d9e7b99354b51de0a37ba2"
+};
+
 function initFirebase(){
   try{
     var saved=localStorage.getItem(FB_KEY);
-    if(!saved)return false;
-    var cfg=JSON.parse(saved);
+    var cfg=saved?JSON.parse(saved):_FB_DEFAULT;
     if(!cfg.apiKey||!cfg.projectId)return false;
     if(!firebase.apps.length)firebase.initializeApp(cfg);
     db=firebase.firestore();
