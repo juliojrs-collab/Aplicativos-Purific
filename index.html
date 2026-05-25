@@ -468,12 +468,13 @@ function loadDemoData(){
   S.loaded=true;
 }
 
-try{var ss=sessionStorage.getItem(SESS_KEY);if(ss){S.user=JSON.parse(ss);S.view='dashboard';}}catch(e){}
+try{var ss=sessionStorage.getItem(SESS_KEY);if(ss){S.user=JSON.parse(ss);}}catch(e){}
+S.user={profile:'comercial',name:'Admin'};
+S.view='dashboard';
 if(!FB_OK)loadDemoData();
 
 function logout(){
-  S.user=null;S.view='login';S.loginProfile=null;S.loginPin='';
-  try{sessionStorage.removeItem(SESS_KEY);}catch(e){}
+  S.view='dashboard';
   render();
 }
 
