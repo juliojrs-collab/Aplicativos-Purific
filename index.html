@@ -11,6 +11,7 @@
 <title>AquaPure</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
@@ -224,6 +225,7 @@ var FB_KEY='aq_fb_config';
 var SESS_KEY='aq_session';
 var COLS={co:'companies',pu:'purifiers',ma:'maintenances',te:'technicians'};
 var db=null;
+var storage=null;
 var FB_OK=false;
 
 var _FB_DEFAULT={
@@ -242,6 +244,7 @@ function initFirebase(){
     if(!cfg.apiKey||!cfg.projectId)return false;
     if(!firebase.apps.length)firebase.initializeApp(cfg);
     db=firebase.firestore();
+    storage=firebase.storage();
     return true;
   }catch(e){return false;}
 }
@@ -304,24 +307,48 @@ function compressImg(file,cb){
     var img=new Image();
     img.onload=function(){
       var c=document.createElement('canvas');
-      var w=img.width,h=img.height,MAX=900;
+      var w=img.width,h=img.height,MAX=800;
       if(w>MAX||h>MAX){if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;}}
       c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
-      cb(c.toDataURL('image/jpeg',0.72));
+      cb(c.toDataURL('image/jpeg',0.75));
     };
     img.src=e.target.result;
   };
   r.readAsDataURL(file);
 }
 
+function uploadPhoto(folder,b64,onSuccess,onError){
+  if(!FB_OK||!storage){onSuccess(b64);return;}
+  var ts=Date.now();
+  var rnd=Math.random().toString(36).slice(2,7);
+  var path='fotos/'+folder+'/'+ts+'_'+rnd+'.jpg';
+  var ref=storage.ref(path);
+  var b64data=b64.split(',')[1];
+  ref.putString(b64data,'base64',{contentType:'image/jpeg'}).then(function(){
+    return ref.getDownloadURL();
+  }).then(function(url){
+    onSuccess(url);
+  }).catch(function(e){
+    if(onError)onError(e);
+  });
+}
+
 function pickPurPhoto(){
-  var inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  var inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.capture='environment';
   inp.onchange=function(e){
     var f=e.target.files[0];if(!f)return;
+    var prev=document.getElementById('pur-photo-prev');
+    if(prev)prev.innerHTML='<div style="padding:16px;text-align:center;color:var(--text3);">⏳ Enviando foto...</div>';
     compressImg(f,function(b64){
-      _purPhoto=b64;
-      var prev=document.getElementById('pur-photo-prev');
-      if(prev)prev.innerHTML='<img src="'+b64+'" style="width:100%;border-radius:8px;max-height:180px;object-fit:cover;margin-bottom:6px;"/><button class="btn btn-ghost btn-sm" onclick="removePurPhoto()">Remover foto</button>';
+      uploadPhoto('purificadores',b64,function(url){
+        _purPhoto=url;
+        var prev2=document.getElementById('pur-photo-prev');
+        if(prev2)prev2.innerHTML='<img src="'+url+'" style="width:100%;border-radius:8px;max-height:180px;object-fit:cover;margin-bottom:6px;"/><button class="btn btn-ghost btn-sm" onclick="removePurPhoto()">Remover foto</button>';
+      },function(err){
+        showToast('Erro ao enviar foto: '+(err&&err.message||''));
+        var prev2=document.getElementById('pur-photo-prev');
+        if(prev2)prev2.innerHTML='<div class="photo-upload-area" onclick="pickPurPhoto()">Adicionar foto do aparelho (obrigatorio)</div>';
+      });
     });
   };
   inp.click();
@@ -334,11 +361,21 @@ function removePurPhoto(){
 }
 
 function addPhoto(t){
-  var inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  var inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.capture='environment';
   inp.onchange=function(e){
     var f=e.target.files[0];if(!f)return;
     if(_photos[t].length>=3){showToast('Maximo 3 fotos');return;}
-    compressImg(f,function(b64){_photos[t].push(b64);renderPhotoPreview();});
+    var phEl=document.getElementById('ph-'+t);
+    if(phEl){var sp=document.createElement('div');sp.id='ph-spinner-'+t;sp.style.cssText='padding:8px;text-align:center;font-size:12px;color:var(--text3);';sp.textContent='⏳ Enviando...';phEl.appendChild(sp);}
+    compressImg(f,function(b64){
+      uploadPhoto('manutencoes/'+t,b64,function(url){
+        var sp=document.getElementById('ph-spinner-'+t);if(sp)sp.remove();
+        _photos[t].push(url);renderPhotoPreview();
+      },function(err){
+        var sp=document.getElementById('ph-spinner-'+t);if(sp)sp.remove();
+        showToast('Erro ao enviar foto: '+(err&&err.message||''));
+      });
+    });
   };
   inp.click();
 }
@@ -382,15 +419,16 @@ var IC={
   camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>',
   logout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
   bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
-  menu:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>'
+  menu:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>',
+  users:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'
 };
 
 var TL={refil:'Refil',manutencao:'Manutencao',ocorrencia:'Ocorrencia',instalacao:'Instalacao',corretiva:'Corretiva',higienizacao:'Higienizacao'};
 var TLF={refil:'🔄 Refil',manutencao:'🔧 Manutencao',ocorrencia:'⚠️ Ocorrencia',instalacao:'✅ Instalacao',corretiva:'🛠️ Corretiva',higienizacao:'🫧 Higienizacao'};
 
-var TABS=['dashboard','companies','purifiers','maintenance','history','reports'];
-var TAB_ICONS={dashboard:IC.home,companies:IC.bld,purifiers:IC.drop,maintenance:IC.wrench,history:IC.history,reports:IC.reports};
-var TAB_NAMES={dashboard:'Inicio',companies:'Empresas',purifiers:'Purificadores',maintenance:'Manutencao',history:'Historico',reports:'Relatorios'};
+var TABS=['dashboard','companies','purifiers','maintenance','history','reports','technicians'];
+var TAB_ICONS={dashboard:IC.home,companies:IC.bld,purifiers:IC.drop,maintenance:IC.wrench,history:IC.history,reports:IC.reports,technicians:IC.users};
+var TAB_NAMES={dashboard:'Inicio',companies:'Empresas',purifiers:'Purificadores',maintenance:'Manutencao',history:'Historico',reports:'Relatorios',technicians:'Tecnicos'};
 
 var S={
   view:'login',stack:[],selC:null,selP:null,modal:null,
@@ -1249,6 +1287,74 @@ function mQR(pid){
     +'</div>';
 }
 
+function vTechnicians(){
+  if(!isComercial()){return '<div class="empty"><div class="empty-ico">🔒</div><div>Acesso restrito ao perfil Comercial</div></div>';}
+  var html='<div class="page-header"><div class="page-title">Tecnicos</div>'
+    +'<button class="btn btn-primary btn-sm" onclick="openModal(\'te\')">'+IC.plus+' Novo Tecnico</button></div>';
+  if(S.technicians.length===0){
+    return html+'<div class="empty"><div class="empty-ico">👷</div><div>Nenhum tecnico cadastrado</div></div>';
+  }
+  html+='<div class="tbl-wrap"><table><thead><tr><th>Nome</th><th>PIN</th><th>Perfil</th><th>Acoes</th></tr></thead><tbody>';
+  for(var i=0;i<S.technicians.length;i++){
+    var te=S.technicians[i];
+    var pinMask='••••';
+    var profileLabel=te.profile==='comercial'?'💼 Comercial':'🔧 Tecnico';
+    var profileBadge=te.profile==='comercial'?'b-blue':'b-green';
+    html+='<tr>'
+      +'<td style="font-weight:600;">'+esc(te.name||'')+'</td>'
+      +'<td style="font-family:monospace;letter-spacing:3px;">'+pinMask+'</td>'
+      +'<td><span class="badge '+profileBadge+'">'+profileLabel+'</span></td>'
+      +'<td><div class="actions-cell">'
+      +'<button class="ico-btn" onclick="openModal(\'te\',{edit:S.technicians.filter(function(x){return x.id===\''+te.id+'\'})[0]})">'+IC.edit+'</button>'
+      +'<button class="ico-btn danger" onclick="delTe(\''+te.id+'\')">'+IC.trash+'</button>'
+      +'</div></td></tr>';
+  }
+  html+='</tbody></table></div>';
+  return html;
+}
+
+function mTe(ed){
+  var te=ed||{};
+  return '<div class="field"><label>Nome *</label><input id="te-name" value="'+esc(te.name||'')+'" placeholder="Nome completo"/></div>'
+    +'<div class="g2">'
+    +'<div class="field"><label>PIN de 4 digitos *</label><input id="te-pin" type="number" min="0" max="9999" value="'+esc(te.pin||'')+'" placeholder="Ex: 1234"/></div>'
+    +'<div class="field"><label>Perfil *</label><select id="te-profile">'
+    +'<option value="tecnico"'+(te.profile==='tecnico'||!te.profile?' selected':'')+'>Tecnico</option>'
+    +'<option value="comercial"'+(te.profile==='comercial'?' selected':'')+'>Comercial</option>'
+    +'</select></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="svTe(\''+(ed?ed.id:'')+'\')">Salvar</button></div>';
+}
+
+function svTe(eid){
+  var name=(document.getElementById('te-name')||{}).value||'';
+  name=name.trim();
+  var pin=(document.getElementById('te-pin')||{}).value||'';
+  pin=pin.trim();
+  var profile=(document.getElementById('te-profile')||{}).value||'tecnico';
+  if(!name){alert('Informe o nome');return;}
+  if(!pin||pin.length!==4||isNaN(parseInt(pin))){alert('PIN deve ter 4 digitos');return;}
+  var dup=S.technicians.filter(function(t){return t.pin===pin&&t.id!==eid;});
+  if(dup.length>0){alert('Este PIN ja esta em uso por '+dup[0].name);return;}
+  var it={name:name,pin:pin,profile:profile,createdAt:new Date().toISOString()};
+  if(!FB_OK||!db){
+    if(eid){for(var i=0;i<S.technicians.length;i++)if(S.technicians[i].id===eid){for(var k in it)S.technicians[i][k]=it[k];break;}}
+    else{it.id=uid();S.technicians.push(it);}
+    showToast('Tecnico salvo!');closeModal();render();return;
+  }
+  if(eid)db.collection(COLS.te).doc(eid).update(it).then(function(){showToast('Tecnico salvo!');closeModal();}).catch(function(e){alert('Erro: '+e.message);});
+  else db.collection(COLS.te).add(it).then(function(){showToast('Tecnico salvo!');closeModal();}).catch(function(e){alert('Erro: '+e.message);});
+}
+
+function delTe(id){
+  if(!confirm('Excluir este tecnico?'))return;
+  if(!FB_OK||!db){
+    S.technicians=S.technicians.filter(function(x){return x.id!==id;});
+    render();showToast('Tecnico excluido');return;
+  }
+  db.collection(COLS.te).doc(id).delete().then(function(){showToast('Tecnico excluido');}).catch(function(e){alert('Erro: '+e.message);});
+}
+
 function selType(v){
   document.getElementById('mtype').value=v;
   var chips=document.querySelectorAll('.chip');
@@ -1402,9 +1508,17 @@ function connectFirebase(){
     var cfg=JSON.parse(json);
     if(!cfg.apiKey||!cfg.projectId)throw new Error('Incompleto');
     if(firebase.apps.length)firebase.apps.forEach(function(a){a.delete();});
-    firebase.initializeApp(cfg);db=firebase.firestore();FB_OK=true;
+    firebase.initializeApp(cfg);db=firebase.firestore();storage=firebase.storage();FB_OK=true;
     try{localStorage.setItem(FB_KEY,JSON.stringify(cfg));}catch(e){}
-    startListeners();showToast('Firebase conectado!');S.loginProfile=null;render();
+    startListeners();
+    db.collection(COLS.te).limit(1).get().then(function(snap){
+      if(snap.empty){
+        db.collection(COLS.te).add({name:'Admin',pin:'1234',profile:'comercial',createdAt:new Date().toISOString()}).then(function(){
+          showToast('Tecnico admin criado! PIN: 1234');
+        }).catch(function(){});
+      }
+    }).catch(function(){});
+    showToast('Firebase conectado!');S.loginProfile=null;render();
   }catch(e){alert('Erro: '+e.message);}
 }
 
@@ -1528,7 +1642,7 @@ function render(){
 
   var activeTab=({cd:'companies',pd:'purifiers'}[S.view])||S.view;
   var canBack=S.view==='cd'||S.view==='pd';
-  var pageTitles={dashboard:'Dashboard',companies:'Empresas',cd:S.selC?S.selC.name:'Empresa',purifiers:'Purificadores',pd:(function(){var p=S.selP;return p?((p.br||'')+' '+(p.mo||'')).trim()||'Purificador':'Purificador';})(),maintenance:'Manutencao',history:'Historico',reports:'Relatorios'};
+  var pageTitles={dashboard:'Dashboard',companies:'Empresas',cd:S.selC?S.selC.name:'Empresa',purifiers:'Purificadores',pd:(function(){var p=S.selP;return p?((p.br||'')+' '+(p.mo||'')).trim()||'Purificador':'Purificador';})(),maintenance:'Manutencao',history:'Historico',reports:'Relatorios',technicians:'Tecnicos'};
 
   var content='';
   if(S.view==='dashboard')content=vDashboard();
@@ -1539,6 +1653,7 @@ function render(){
   else if(S.view==='maintenance')content=vMaintenance();
   else if(S.view==='history')content=vHistory();
   else if(S.view==='reports')content=vReports();
+  else if(S.view==='technicians')content=vTechnicians();
 
   var alerts=allAlerts();
   var urgentes=alerts.filter(function(a){return a.d<=15;}).length;
@@ -1546,18 +1661,20 @@ function render(){
   var modal='';
   if(S.modal){
     var t=S.modal.t;var d=S.modal.d;
-    var titles={co:d.edit?'Editar empresa':'Nova empresa',pu:d.edit?'Editar purificador':'Novo purificador',ma:'Registrar manutencao',qr:'QR Code'};
+    var titles={co:d.edit?'Editar empresa':'Nova empresa',pu:d.edit?'Editar purificador':'Novo purificador',ma:'Registrar manutencao',qr:'QR Code',te:d.edit?'Editar tecnico':'Novo tecnico'};
     var mb='';
     if(t==='co')mb=mCo(d.edit||null);
     else if(t==='pu')mb=mPu(d.edit||null,d.cid||null);
     else if(t==='ma')mb=mMa(d.pid||null);
     else if(t==='qr')mb=mQR(d.pid||null);
+    else if(t==='te')mb=mTe(d.edit||null);
     modal='<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-hdr"><h2>'+(titles[t]||'')+'</h2><button class="ico-btn" onclick="closeModal()">'+IC.x+'</button></div><div class="modal-body">'+mb+'</div></div></div>';
   }
 
   var sbItems='';
   for(var i=0;i<TABS.length;i++){
     var tab=TABS[i];
+    if(tab==='technicians'&&!isComercial())continue;
     sbItems+='<div class="sb-item'+(activeTab===tab?' active':'')+'" onclick="setTab(\''+tab+'\')">'
       +TAB_ICONS[tab]+'<span>'+TAB_NAMES[tab]+'</span>'
       +(tab==='maintenance'&&urgentes>0?'<span class="sb-badge">'+urgentes+'</span>':'')
@@ -1567,6 +1684,7 @@ function render(){
   var bnav='';
   for(var i=0;i<TABS.length;i++){
     var tab=TABS[i];
+    if(tab==='technicians'&&!isComercial())continue;
     bnav+='<button class="ntab'+(activeTab===tab?' active':'')+'" onclick="setTab(\''+tab+'\')">'
       +TAB_ICONS[tab]
       +(tab==='maintenance'&&urgentes>0?'<span class="notif-badge">'+urgentes+'</span>':'')
