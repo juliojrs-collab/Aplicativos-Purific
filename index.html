@@ -482,11 +482,20 @@ function pinKey(k){
   if(S.loginPin.length>=4)return;
   S.loginPin+=k;
   if(S.loginPin.length===4){
-    var ok=FB_OK?(S.loginPin===S.pins[S.loginProfile]):true;
+    var found=null;
+    if(FB_OK){
+      if(S.technicians.length===0&&!S.loaded){showToast('Aguarde, carregando...');S.loginPin='';render();return;}
+      for(var i=0;i<S.technicians.length;i++){
+        var te=S.technicians[i];
+        if(te.pin===S.loginPin&&te.profile===S.loginProfile){found=te;break;}
+      }
+    }
+    var ok=FB_OK?!!found:true;
     if(ok){
-      S.user={profile:S.loginProfile,name:{comercial:'Comercial',tecnico:'Tecnico'}[S.loginProfile]};
+      var teName=found?found.name:({comercial:'Comercial',tecnico:'Tecnico'}[S.loginProfile]);
+      S.user={profile:S.loginProfile,name:teName};
       try{sessionStorage.setItem(SESS_KEY,JSON.stringify(S.user));}catch(e){}
-      if(FB_OK&&db)startListeners();
+      if(FB_OK&&db&&!S.loaded)startListeners();
       S.view='dashboard';S.loginPin='';
     }else{showToast('PIN incorreto');S.loginPin='';}
   }
@@ -1212,7 +1221,7 @@ function mPu(ed,cid){
 function mMa(pid){
   var p=pid?S.purifiers.filter(function(x){return x.id===pid;})[0]:null;
   var techOpts='<option value="">Selecione...</option>';
-  for(var i=0;i<S.technicians.length;i++)if(S.technicians[i].active)techOpts+='<option value="'+esc(S.technicians[i].name)+'">'+esc(S.technicians[i].name)+'</option>';
+  for(var i=0;i<S.technicians.length;i++){var tet=S.technicians[i];if(tet.active!==false)techOpts+='<option value="'+esc(tet.name)+'">'+esc(tet.name)+'</option>';}
 
   var selCid=S.maCid||'';
   var pursOfCo=selCid?S.purifiers.filter(function(x){return x.cid===selCid&&!x.inactive;}):[];
