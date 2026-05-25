@@ -436,7 +436,7 @@ var S={
   user:null,
   pins:{comercial:'2222',tecnico:'1111'},
   loginProfile:null,loginPin:'',
-  loaded:false,search:'',showInactive:false,
+  loaded:false,techLoaded:false,search:'',showInactive:false,
   selM:null,selMa:null,
   maCid:'',maPid:''
 };
@@ -484,7 +484,7 @@ function pinKey(k){
   if(S.loginPin.length===4){
     var found=null;
     if(FB_OK){
-      if(S.technicians.length===0&&!S.loaded){showToast('Aguarde, carregando...');S.loginPin='';render();return;}
+      if(!S.techLoaded){showToast('Aguarde, carregando...');S.loginPin='';render();return;}
       for(var i=0;i<S.technicians.length;i++){
         var te=S.technicians[i];
         if(te.pin===S.loginPin&&te.profile===S.loginProfile){found=te;break;}
@@ -1540,12 +1540,15 @@ function startListeners(){
     (function(col,key){
       unsubs.push(db.collection(col).onSnapshot(function(snap){
         S[key]=snap.docs.map(function(d){var o={id:d.id};var data=d.data();for(var k in data)o[k]=data[k];return o;});
-        if(key==='technicians'&&!_adminChecked){
-          _adminChecked=true;
-          if(snap.empty){
-            db.collection(COLS.te).add({name:'Admin',pin:'1234',profile:'comercial',createdAt:new Date().toISOString()}).then(function(){
-              showToast('Acesso inicial: perfil Comercial, PIN 1234');
-            }).catch(function(){});
+        if(key==='technicians'){
+          S.techLoaded=true;
+          if(!_adminChecked){
+            _adminChecked=true;
+            if(snap.empty){
+              db.collection(COLS.te).add({name:'Admin',pin:'1234',profile:'comercial',createdAt:new Date().toISOString()}).then(function(){
+                showToast('Acesso inicial: perfil Comercial, PIN 1234');
+              }).catch(function(){});
+            }
           }
         }
         S.loaded=true;render();
