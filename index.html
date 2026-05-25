@@ -477,27 +477,36 @@ function logout(){
   render();
 }
 
+function doLogin(){
+  var found=null;
+  if(FB_OK){
+    for(var i=0;i<S.technicians.length;i++){
+      var te=S.technicians[i];
+      if(String(te.pin)===String(S.loginPin)&&te.profile===S.loginProfile){found=te;break;}
+    }
+  }
+  var ok=FB_OK?!!found:true;
+  if(ok){
+    var teName=found?found.name:({comercial:'Comercial',tecnico:'Tecnico'}[S.loginProfile]);
+    S.user={profile:S.loginProfile,name:teName};
+    try{sessionStorage.setItem(SESS_KEY,JSON.stringify(S.user));}catch(e){}
+    S.view='dashboard';S.loginPin='';S._waitingLogin=false;
+  }else{showToast('PIN incorreto');S.loginPin='';S._waitingLogin=false;}
+  render();
+}
 function pinKey(k){
   if(k==='←'){S.loginPin=S.loginPin.slice(0,-1);render();return;}
   if(S.loginPin.length>=4)return;
   S.loginPin+=k;
   if(S.loginPin.length===4){
-    var found=null;
-    if(FB_OK){
-      if(!S.techLoaded){showToast('Aguarde, carregando...');S.loginPin='';render();return;}
-      for(var i=0;i<S.technicians.length;i++){
-        var te=S.technicians[i];
-        if(te.pin===S.loginPin&&te.profile===S.loginProfile){found=te;break;}
-      }
+    if(FB_OK&&!S.techLoaded){
+      S._waitingLogin=true;
+      showToast('Aguardando dados...');
+      render();
+      return;
     }
-    var ok=FB_OK?!!found:true;
-    if(ok){
-      var teName=found?found.name:({comercial:'Comercial',tecnico:'Tecnico'}[S.loginProfile]);
-      S.user={profile:S.loginProfile,name:teName};
-      try{sessionStorage.setItem(SESS_KEY,JSON.stringify(S.user));}catch(e){}
-      if(FB_OK&&db&&!S.loaded)startListeners();
-      S.view='dashboard';S.loginPin='';
-    }else{showToast('PIN incorreto');S.loginPin='';}
+    doLogin();
+    return;
   }
   render();
 }
@@ -572,10 +581,12 @@ function vLogin(){
     +'<button onclick="S.loginProfile=null;S.loginPin=\'\';render()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;margin-bottom:16px;font-family:inherit;">← Voltar</button>'
     +'<div style="text-align:center;margin-bottom:16px;"><div style="font-size:38px;">'+ic+'</div>'
     +'<h2 style="font-size:18px;font-weight:700;margin-top:8px;">'+nm+'</h2>'
-    +(FB_OK?'<p style="font-size:12px;color:var(--text2);margin-top:4px;">Digite seu PIN de 4 digitos</p>':'<p style="font-size:11px;color:var(--amber);margin-top:4px;">Demo: qualquer PIN funciona</p>')
+    +(FB_OK&&!S.techLoaded?'<p style="font-size:11px;color:var(--amber);margin-top:4px;">⏳ Conectando ao servidor...</p>'
+      :FB_OK?'<p style="font-size:12px;color:var(--text2);margin-top:4px;">Digite seu PIN de 4 digitos</p>'
+      :'<p style="font-size:11px;color:var(--amber);margin-top:4px;">Demo: qualquer PIN funciona</p>')
     +'</div>'
     +'<div class="pin-display">'+dots+'</div>'
-    +'<div class="pin-pad">'+pad+'</div>'
+    +(FB_OK&&!S.techLoaded?'<p style="font-size:11px;color:var(--text3);text-align:center;padding:8px;">Aguarde o carregamento...</p>':'<div class="pin-pad">'+pad+'</div>')
     +'</div></div>';
 }
 
@@ -1550,6 +1561,7 @@ function startListeners(){
               }).catch(function(){});
             }
           }
+          if(S._waitingLogin&&S.loginPin.length===4){doLogin();return;}
         }
         S.loaded=true;render();
       }));
