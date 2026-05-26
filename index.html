@@ -318,20 +318,8 @@ function compressImg(file,cb){
 }
 
 function uploadPhoto(folder,b64,onSuccess,onError){
-  if(!FB_OK||!storage){onSuccess(b64);return;}
-  var ts=Date.now();
-  var rnd=Math.random().toString(36).slice(2,7);
-  var path='fotos/'+folder+'/'+ts+'_'+rnd+'.jpg';
-  var ref=storage.ref(path);
-  var b64data=b64.split(',')[1];
-  ref.putString(b64data,'base64',{contentType:'image/jpeg'}).then(function(){
-    return ref.getDownloadURL();
-  }).then(function(url){
-    onSuccess(url);
-  }).catch(function(){
-    // Storage sem permissão: salva base64 direto no Firestore
-    onSuccess(b64);
-  });
+  // Salva base64 direto — comprimido fica ~100KB, dentro do limite do Firestore
+  onSuccess(b64);
 }
 
 function pickPurPhoto(useCamera){
