@@ -328,13 +328,15 @@ function uploadPhoto(folder,b64,onSuccess,onError){
     return ref.getDownloadURL();
   }).then(function(url){
     onSuccess(url);
-  }).catch(function(e){
-    if(onError)onError(e);
+  }).catch(function(){
+    // Storage sem permissão: salva base64 direto no Firestore
+    onSuccess(b64);
   });
 }
 
-function pickPurPhoto(){
-  var inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.capture='environment';
+function pickPurPhoto(useCamera){
+  var inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  if(useCamera)inp.capture='environment';
   inp.onchange=function(e){
     var f=e.target.files[0];if(!f)return;
     var prev=document.getElementById('pur-photo-prev');
@@ -343,15 +345,27 @@ function pickPurPhoto(){
       uploadPhoto('purificadores',b64,function(url){
         _purPhoto=url;
         var prev2=document.getElementById('pur-photo-prev');
-        if(prev2)prev2.innerHTML='<img src="'+url+'" style="width:100%;border-radius:8px;max-height:180px;object-fit:cover;margin-bottom:6px;"/><button class="btn btn-ghost btn-sm" onclick="removePurPhoto()">Remover foto</button>';
-      },function(err){
-        showToast('Erro ao enviar foto: '+(err&&err.message||''));
+        if(prev2)prev2.innerHTML='<img src="'+url+'" style="width:100%;border-radius:8px;max-height:180px;object-fit:cover;margin-bottom:6px;"/>'
+          +'<button class="btn btn-ghost btn-sm" onclick="removePurPhoto()">🗑 Remover foto</button>';
+      },function(){
+        showToast('Erro ao processar foto');
         var prev2=document.getElementById('pur-photo-prev');
-        if(prev2)prev2.innerHTML='<div class="photo-upload-area" onclick="pickPurPhoto()">Adicionar foto do aparelho (obrigatorio)</div>';
+        if(prev2)prev2.innerHTML='<div class="photo-upload-area-btns" id="pur-photo-prev">'+purPhotoBtns()+'</div>';
       });
     });
   };
   inp.click();
+}
+function purPhotoBtns(){
+  return '<div style="display:flex;gap:8px;justify-content:center;">'
+    +'<button class="btn btn-ghost" onclick="pickPurPhoto(true)">📷 Câmera</button>'
+    +'<button class="btn btn-ghost" onclick="pickPurPhoto(false)">🖼 Galeria</button>'
+    +'</div>';
+}
+function removePurPhoto(){
+  _purPhoto='';
+  var prev=document.getElementById('pur-photo-prev');
+  if(prev)prev.innerHTML=purPhotoBtns();
 }
 
 function removePurPhoto(){
@@ -360,8 +374,9 @@ function removePurPhoto(){
   if(prev)prev.innerHTML='<div class="photo-upload-area" onclick="pickPurPhoto()">Adicionar foto do aparelho (obrigatorio)</div>';
 }
 
-function addPhoto(t){
-  var inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.capture='environment';
+function addPhoto(t,useCamera){
+  var inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  if(useCamera)inp.capture='environment';
   inp.onchange=function(e){
     var f=e.target.files[0];if(!f)return;
     if(_photos[t].length>=3){showToast('Maximo 3 fotos');return;}
@@ -371,9 +386,9 @@ function addPhoto(t){
       uploadPhoto('manutencoes/'+t,b64,function(url){
         var sp=document.getElementById('ph-spinner-'+t);if(sp)sp.remove();
         _photos[t].push(url);renderPhotoPreview();
-      },function(err){
+      },function(){
         var sp=document.getElementById('ph-spinner-'+t);if(sp)sp.remove();
-        showToast('Erro ao enviar foto: '+(err&&err.message||''));
+        showToast('Erro ao processar foto');
       });
     });
   };
@@ -1197,8 +1212,8 @@ function mPu(ed,cid){
   var p=ed||{};var dc=cid||(S.selC&&S.selC.id)||p.cid||'';var inactive=p.inactive||false;
   var coName='';var coEl=S.companies.filter(function(x){return x.id===(dc||p.cid);})[0];if(coEl)coName=coEl.name;
   var photoHtml=_purPhoto
-    ?'<img src="'+_purPhoto+'" style="width:100%;border-radius:8px;max-height:180px;object-fit:cover;margin-bottom:6px;"/><button class="btn btn-ghost btn-sm" onclick="removePurPhoto()">Remover foto</button>'
-    :'<div class="photo-upload-area" onclick="pickPurPhoto()">Adicionar foto do aparelho (obrigatorio)</div>';
+    ?'<img src="'+_purPhoto+'" style="width:100%;border-radius:8px;max-height:180px;object-fit:cover;margin-bottom:6px;"/><button class="btn btn-ghost btn-sm" onclick="removePurPhoto()">🗑 Remover foto</button>'
+    :purPhotoBtns();
   var coSel='';
   if(!ed&&!dc){
     coSel='<div class="field"><label>Empresa *</label><select id="mcid"><option value="">Selecione...</option>';
@@ -1280,10 +1295,10 @@ function mMa(pid){
     +'<div class="field" id="nhg-f" style="display:none"><label>Prox. Higienizacao</label><input type="date" id="mnhg" value="'+addMon(today(),12)+'"/></div>'
     +'</div></div>'
     +'<div class="field"><label>Foto ANTES do servico</label>'
-    +'<div class="photo-upload-area" onclick="addPhoto(\'before\')">Selecionar imagem</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:6px;"><button class="btn btn-ghost btn-sm" onclick="addPhoto(\'before\',true)">📷 Câmera</button><button class="btn btn-ghost btn-sm" onclick="addPhoto(\'before\',false)">🖼 Galeria</button></div>'
     +'<div class="photo-grid" id="ph-before"></div></div>'
     +'<div class="field"><label>Foto DEPOIS do servico</label>'
-    +'<div class="photo-upload-area" onclick="addPhoto(\'after\')">Selecionar imagem</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:6px;"><button class="btn btn-ghost btn-sm" onclick="addPhoto(\'after\',true)">📷 Câmera</button><button class="btn btn-ghost btn-sm" onclick="addPhoto(\'after\',false)">🖼 Galeria</button></div>'
     +'<div class="photo-grid" id="ph-after"></div></div>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">'
     +'<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>'
