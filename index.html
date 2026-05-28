@@ -118,8 +118,8 @@ tr:hover td{background:#fafbfc;}
 .chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px;}
 .chip{padding:8px 15px;border-radius:var(--r3);border:1.5px solid var(--border2);cursor:pointer;font-size:13px;font-weight:600;background:var(--surface);color:var(--text2);transition:all .15s;}
 .chip.active{border-color:var(--blue);background:var(--blue-light);color:var(--blue);}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;}
-.modal{background:var(--surface);border-radius:16px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,.2);}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;}
+.modal{background:var(--surface);border-radius:16px;width:100%;max-width:600px;max-height:none;overflow-y:visible;box-shadow:0 25px 60px rgba(0,0,0,.2);margin:auto;}
 .modal-hdr{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;position:sticky;top:0;background:var(--surface);z-index:5;border-bottom:1px solid var(--border);}
 .modal-hdr h2{font-size:16px;font-weight:700;}
 .modal-body{padding:20px;}
@@ -199,8 +199,8 @@ tr:hover td{background:#fafbfc;}
   .dates-grid{grid-template-columns:1fr 1fr;}
   .g3{grid-template-columns:1fr 1fr;}
   .search-input{width:100%;}
-  .overlay{align-items:flex-end;padding:0;}
-  .modal{border-radius:20px 20px 0 0;max-width:100%;}
+  .overlay{align-items:flex-start;padding:0;padding-top:env(safe-area-inset-top,0);}
+  .modal{border-radius:0;max-width:100%;min-height:100%;}
   body{font-size:15px;}
   .li-title{font-size:16px;}
   .li-sub{font-size:14px;}
@@ -1676,6 +1676,8 @@ function exportPDF(){
 function render(){
   var root=document.getElementById('root');if(!root)return;
   if(!S.user||S.view==='login'){root.innerHTML=vLogin();return;}
+  var ae=document.activeElement;
+  if(S.modal&&ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA')&&ae.closest&&ae.closest('.modal')){return;}
 
   var activeTab=({cd:'companies',pd:'purifiers'}[S.view])||S.view;
   var canBack=S.view==='cd'||S.view==='pd';
