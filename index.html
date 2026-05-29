@@ -1631,11 +1631,10 @@ function exportPDF(){
       function st(d){return d<0?'VENCIDO':d<=15?d+'d URGENTE':d<=30?d+'d':'OK';}
       var statusX=MR-60;
       doc.setFontSize(6.5);doc.setFont('helvetica','bold');
-      var rC=dDiff(p.nf)<0?[224,36,36]:dDiff(p.nf)<=15?[194,120,3]:[14,159,110];
-      doc.setTextColor(rC[0],rC[1],rC[2]);doc.text('Refil: '+fmtDate(p.nf)+' ('+st(dDiff(p.nf))+')',statusX,py+10);
-      var mC=dDiff(p.nm)<0?[224,36,36]:dDiff(p.nm)<=15?[194,120,3]:[14,159,110];
-      doc.setTextColor(mC[0],mC[1],mC[2]);doc.text('Manut: '+fmtDate(p.nm)+' ('+st(dDiff(p.nm))+')',statusX,py+16);
-      if(p.nhg){var hC=dDiff(p.nhg)<0?[224,36,36]:dDiff(p.nhg)<=15?[194,120,3]:[14,159,110];doc.setTextColor(hC[0],hC[1],hC[2]);doc.text('Higien: '+fmtDate(p.nhg)+' ('+st(dDiff(p.nhg))+')',statusX,py+22);}
+      var rC=p.nf?(dDiff(p.nf)<0?[224,36,36]:dDiff(p.nf)<=15?[194,120,3]:[14,159,110]):[150,150,150];
+      doc.setTextColor(rC[0],rC[1],rC[2]);doc.text('Prox. Refil: '+(p.nf?fmtDate(p.nf)+' ('+st(dDiff(p.nf))+')':'-'),statusX,py+13);
+      var hC=p.nhg?(dDiff(p.nhg)<0?[224,36,36]:dDiff(p.nhg)<=15?[194,120,3]:[14,159,110]):[150,150,150];
+      doc.setTextColor(hC[0],hC[1],hC[2]);doc.text('Prox. Higienizacao: '+(p.nhg?fmtDate(p.nhg)+' ('+st(dDiff(p.nhg))+')':'-'),statusX,py+20);
       doc.setTextColor(30,30,30);
       py+=cardH+3;
     }
