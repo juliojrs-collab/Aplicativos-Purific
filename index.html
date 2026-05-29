@@ -1611,17 +1611,47 @@ function exportPDF(){
   doc.setTextColor(14,159,110);doc.text(mans.length+' registros',ML+98,42);
   doc.setTextColor(30,30,30);
   if(purs.length>0){
-    doc.setFontSize(10);doc.setFont('helvetica','bold');doc.text('Status dos Purificadores',ML,56);
-    var rows=[];
+    doc.setFontSize(10);doc.setFont('helvetica','bold');doc.text('Purificadores Cadastrados',ML,56);
+    var py=60;
     for(var i=0;i<purs.length;i++){
       var p=purs[i];var co=S.companies.filter(function(x){return x.id===p.cid;})[0];
+      var cardH=30;
+      if(py+cardH>285){doc.addPage();py=14;}
+      doc.setFillColor(248,250,252);doc.roundedRect(ML,py,MR-ML,cardH,2,2,'F');
+      doc.setDrawColor(220,220,220);doc.setLineWidth(0.2);doc.roundedRect(ML,py,MR-ML,cardH,2,2,'S');
+      var txtX=ML+4;
+      if(p.photo){
+        try{
+          var fmt2=p.photo.indexOf('data:image/png')===0?'PNG':'JPEG';
+          doc.addImage(p.photo,fmt2,ML+2,py+2,24,24);
+          doc.setDrawColor(210,210,210);doc.setLineWidth(0.2);doc.rect(ML+2,py+2,24,24);
+          txtX=ML+29;
+        }catch(e){}
+      }
+      doc.setFontSize(8.5);doc.setFont('helvetica','bold');doc.setTextColor(20,20,20);
+      doc.text(esc(p.br||'')+' '+esc(p.mo||''),txtX,py+7);
+      doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(80,80,80);
+      if(co)doc.text('Empresa: '+esc(co.name),txtX,py+12);
+      if(p.loc)doc.text('Local: '+esc(p.loc),txtX,py+17);
+      var infos=[];
+      if(p.cn)infos.push('N° Aparelho: '+esc(p.cn));
+      if(p.sn)infos.push('N° Serie: '+esc(p.sn));
+      if(p.volt)infos.push('Voltagem: '+esc(p.volt));
+      if(infos.length>0)doc.text(infos.join('   |   '),txtX,py+22);
       function st(d){return d<0?'VENCIDO':d<=15?d+'d URGENTE':d<=30?d+'d':'OK';}
-      rows.push([co?co.name:'',p.loc||'',esc(p.br||'')+' '+esc(p.mo||''),fmtDate(p.nf)+' '+st(dDiff(p.nf)),fmtDate(p.nm)+' '+st(dDiff(p.nm)),p.nhg?fmtDate(p.nhg)+' '+st(dDiff(p.nhg)):'-']);
+      var statusX=MR-60;
+      doc.setFontSize(6.5);doc.setFont('helvetica','bold');
+      var rC=dDiff(p.nf)<0?[224,36,36]:dDiff(p.nf)<=15?[194,120,3]:[14,159,110];
+      doc.setTextColor(rC[0],rC[1],rC[2]);doc.text('Refil: '+fmtDate(p.nf)+' ('+st(dDiff(p.nf))+')',statusX,py+10);
+      var mC=dDiff(p.nm)<0?[224,36,36]:dDiff(p.nm)<=15?[194,120,3]:[14,159,110];
+      doc.setTextColor(mC[0],mC[1],mC[2]);doc.text('Manut: '+fmtDate(p.nm)+' ('+st(dDiff(p.nm))+')',statusX,py+16);
+      if(p.nhg){var hC=dDiff(p.nhg)<0?[224,36,36]:dDiff(p.nhg)<=15?[194,120,3]:[14,159,110];doc.setTextColor(hC[0],hC[1],hC[2]);doc.text('Higien: '+fmtDate(p.nhg)+' ('+st(dDiff(p.nhg))+')',statusX,py+22);}
+      doc.setTextColor(30,30,30);
+      py+=cardH+3;
     }
-    doc.autoTable({startY:59,head:[['Empresa','Local','Modelo','Refil','Manutencao','Higienizacao']],body:rows,styles:{fontSize:7,cellPadding:2.5},headStyles:{fillColor:[26,86,219],textColor:255},alternateRowStyles:{fillColor:[248,250,252]},didParseCell:function(d){var t=(d.cell.raw||'')+'';if(t.indexOf('VENCIDO')>=0)d.cell.styles.textColor=[224,36,36];else if(t.indexOf('URGENTE')>=0)d.cell.styles.textColor=[194,120,3];}});
   }
   if(mans.length>0){
-    var y=doc.lastAutoTable?doc.lastAutoTable.finalY+10:60;
+    var y=typeof py!=='undefined'?py+4:60;
     doc.setFontSize(10);doc.setFont('helvetica','bold');doc.setTextColor(30,30,30);
     doc.text('Manutencoes ('+mans.length+')',ML,y);y+=6;
     var TLC={refil:[14,159,110],manutencao:[194,120,3],ocorrencia:[224,36,36],instalacao:[124,58,237],corretiva:[234,88,12],higienizacao:[6,148,162]};
