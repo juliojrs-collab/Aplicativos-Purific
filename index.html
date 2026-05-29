@@ -1221,12 +1221,6 @@ function mPu(ed,cid){
     +'<div class="section-box" style="border-color:var(--green)"><div class="section-box-title" style="color:var(--green)">Troca de Refil</div>'
     +'<div class="g2"><div class="field"><label>Ultimo refil</label><input type="date" id="mlf" value="'+(p.lf||today())+'"/></div>'
     +'<div class="field"><label>Intervalo</label><select id="mfim"><option value="3"'+(parseInt(p.fim)===3?' selected':'')+'>3 meses</option><option value="4"'+(parseInt(p.fim)===4?' selected':'')+'>4 meses</option><option value="6"'+((!p.fim||parseInt(p.fim)===6)?' selected':'')+'>6 meses</option><option value="8"'+(parseInt(p.fim)===8?' selected':'')+'>8 meses</option><option value="12"'+(parseInt(p.fim)===12?' selected':'')+'>12 meses</option></select></div></div></div>'
-    +'<div class="section-box" style="border-color:var(--amber)"><div class="section-box-title" style="color:var(--amber)">Manutencao Periodica</div>'
-    +'<div class="g2"><div class="field"><label>Ultima manut.</label><input type="date" id="mlm" value="'+(p.lm||today())+'"/></div>'
-    +'<div class="field"><label>Intervalo</label><select id="mmim"><option value="6"'+(parseInt(p.mim)===6?' selected':'')+'>6 meses</option><option value="8"'+(parseInt(p.mim)===8?' selected':'')+'>8 meses</option><option value="12"'+((!p.mim||parseInt(p.mim)===12)?' selected':'')+'>12 meses</option><option value="18"'+(parseInt(p.mim)===18?' selected':'')+'>18 meses</option><option value="24"'+(parseInt(p.mim)===24?' selected':'')+'>24 meses</option></select></div></div></div>'
-    +'<div class="section-box" style="border-color:#ea580c"><div class="section-box-title" style="color:#ea580c">Manutencao Corretiva</div>'
-    +'<div class="g2"><div class="field"><label>Ultima corretiva</label><input type="date" id="mlmc" value="'+(p.lmc||'')+'"/></div>'
-    +'<div class="field"><label>Intervalo</label><select id="mnmcI"><option value="6"'+(parseInt(p.nmcI)===6?' selected':'')+'>6 meses</option><option value="8"'+(parseInt(p.nmcI)===8?' selected':'')+'>8 meses</option><option value="12"'+((!p.nmcI||parseInt(p.nmcI)===12)?' selected':'')+'>12 meses</option><option value="18"'+(parseInt(p.nmcI)===18?' selected':'')+'>18 meses</option><option value="24"'+(parseInt(p.nmcI)===24?' selected':'')+'>24 meses</option></select></div></div></div>'
     +'<div class="section-box" style="border-color:var(--teal)"><div class="section-box-title" style="color:var(--teal)">Higienizacao</div>'
     +'<div class="g2"><div class="field"><label>Ultima higieniz.</label><input type="date" id="mlhg" value="'+(p.lhg||'')+'"/></div>'
     +'<div class="field"><label>Intervalo</label><select id="mnhgI"><option value="3"'+(parseInt(p.nhgI)===3?' selected':'')+'>3 meses</option><option value="4"'+(parseInt(p.nhgI)===4?' selected':'')+'>4 meses</option><option value="6"'+(parseInt(p.nhgI)===6?' selected':'')+'>6 meses</option><option value="8"'+(parseInt(p.nhgI)===8?' selected':'')+'>8 meses</option><option value="12"'+((!p.nhgI||parseInt(p.nhgI)===12)?' selected':'')+'>12 meses</option></select></div></div></div>'
@@ -1457,16 +1451,12 @@ function svP(eid,cidArg){
   if(!br||!mo){alert('Preencha Marca e Modelo');return;}
   var lf=document.getElementById('mlf')?document.getElementById('mlf').value:today();
   var fim=parseInt(document.getElementById('mfim')?document.getElementById('mfim').value:4)||4;
-  var lm=document.getElementById('mlm')?document.getElementById('mlm').value:today();
-  var mim=parseInt(document.getElementById('mmim')?document.getElementById('mmim').value:12)||12;
-  var lmc=document.getElementById('mlmc')?document.getElementById('mlmc').value:'';
-  var nmcI=parseInt(document.getElementById('mnmcI')?document.getElementById('mnmcI').value:12)||12;
   var lhg=document.getElementById('mlhg')?document.getElementById('mlhg').value:'';
   var nhgI=parseInt(document.getElementById('mnhgI')?document.getElementById('mnhgI').value:12)||12;
   var activeToggle=document.getElementById('minactive');
   var inactive=eid?(activeToggle?!activeToggle.checked:false):false;
   var existingPhoto=eid?(S.purifiers.filter(function(x){return x.id===eid;})[0]||{}).photo||'':'';
-  var it={cid:cid,cn:document.getElementById('mcn')?document.getElementById('mcn').value:'',sn:document.getElementById('msn')?document.getElementById('msn').value:'',br:br,mo:mo,loc:document.getElementById('mloc')?document.getElementById('mloc').value:'',rfm:document.getElementById('mrfm')?document.getElementById('mrfm').value:'',volt:document.getElementById('mvolt')?document.getElementById('mvolt').value:'',ins:document.getElementById('mins')?document.getElementById('mins').value:today(),lf:lf,fim:fim,nf:addMon(lf,fim),lm:lm,mim:mim,nm:addMon(lm,mim),lmc:lmc,nmcI:nmcI,nmc:lmc?addMon(lmc,nmcI):'',lhg:lhg,nhgI:nhgI,nhg:lhg?addMon(lhg,nhgI):'',notes:document.getElementById('mnotes')?document.getElementById('mnotes').value:'',inactive:inactive,photo:_purPhoto||existingPhoto};
+  var it={cid:cid,cn:document.getElementById('mcn')?document.getElementById('mcn').value:'',sn:document.getElementById('msn')?document.getElementById('msn').value:'',br:br,mo:mo,loc:document.getElementById('mloc')?document.getElementById('mloc').value:'',rfm:document.getElementById('mrfm')?document.getElementById('mrfm').value:'',volt:document.getElementById('mvolt')?document.getElementById('mvolt').value:'',ins:document.getElementById('mins')?document.getElementById('mins').value:today(),lf:lf,fim:fim,nf:addMon(lf,fim),lhg:lhg,nhgI:nhgI,nhg:lhg?addMon(lhg,nhgI):'',notes:document.getElementById('mnotes')?document.getElementById('mnotes').value:'',inactive:inactive,photo:_purPhoto||existingPhoto};
   if(!FB_OK||!db){
     if(eid){for(var i=0;i<S.purifiers.length;i++)if(S.purifiers[i].id===eid){for(var k in it)S.purifiers[i][k]=it[k];break;}}
     else{it.id=uid();S.purifiers.push(it);}
