@@ -1587,6 +1587,12 @@ function exportPDF(){
   doc.text('Gerado em: '+nowStr,MR,21,{align:'right'});
   doc.setTextColor(30,30,30);
   var purs=(selId?S.purifiers.filter(function(p){return p.cid===selId;}):S.purifiers).filter(function(p){return!p.inactive;});
+  purs=purs.slice().sort(function(a,b){
+    var na=parseInt(a.cn,10),nb=parseInt(b.cn,10);
+    var va=isNaN(na)?Infinity:na,vb=isNaN(nb)?Infinity:nb;
+    if(va!==vb)return va-vb;
+    return(a.cn||'').localeCompare(b.cn||'');
+  });
   var venc=purs.filter(function(p){return[p.nf,p.nm,p.nhg].some(function(d){return d&&dDiff(d)<0;});}).length;
   var mans=S.maintenances.filter(function(m){
     if(selId&&m.cid!==selId)return false;
