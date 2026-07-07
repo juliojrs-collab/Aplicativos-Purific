@@ -1882,7 +1882,8 @@ function exportPDF(){
     var py=60;
     for(var i=0;i<purs.length;i++){
       var p=purs[i];var co=S.companies.filter(function(x){return x.id===p.cid;})[0];
-      var cardH=30;
+      var hasNotes=!!(p.notes&&p.notes.trim());
+      var cardH=hasNotes?38:30;
       if(py+cardH>285){doc.addPage();py=14;}
       doc.setFillColor(248,250,252);doc.roundedRect(ML,py,MR-ML,cardH,2,2,'F');
       doc.setDrawColor(220,220,220);doc.setLineWidth(0.2);doc.roundedRect(ML,py,MR-ML,cardH,2,2,'S');
@@ -1890,8 +1891,9 @@ function exportPDF(){
       if(p.photo){
         try{
           var fmt2=p.photo.indexOf('data:image/png')===0?'PNG':'JPEG';
-          doc.addImage(p.photo,fmt2,ML+2,py+2,24,24);
-          doc.setDrawColor(210,210,210);doc.setLineWidth(0.2);doc.rect(ML+2,py+2,24,24);
+          var imgH=hasNotes?34:24;
+          doc.addImage(p.photo,fmt2,ML+2,py+2,24,imgH);
+          doc.setDrawColor(210,210,210);doc.setLineWidth(0.2);doc.rect(ML+2,py+2,24,imgH);
           txtX=ML+29;
         }catch(e){}
       }
@@ -1901,10 +1903,17 @@ function exportPDF(){
       if(co)doc.text('Empresa: '+esc(co.name),txtX,py+12);
       if(p.loc)doc.text('Local: '+esc(p.loc),txtX,py+17);
       var infos=[];
-      if(p.cn)infos.push('N° Aparelho: '+esc(p.cn));
-      if(p.sn)infos.push('N° Serie: '+esc(p.sn));
+      if(p.cn)infos.push('N\u00b0 Aparelho: '+esc(p.cn));
+      if(p.sn)infos.push('N\u00b0 Serie: '+esc(p.sn));
       if(p.volt)infos.push('Voltagem: '+esc(p.volt));
       if(infos.length>0)doc.text(infos.join('   |   '),txtX,py+22);
+      if(hasNotes){
+        doc.setFontSize(6.5);doc.setFont('helvetica','italic');doc.setTextColor(100,100,100);
+        var notesMaxW=(MR-60)-txtX-4;
+        var notesLines=doc.splitTextToSize('Obs: '+p.notes.trim(),notesMaxW);
+        doc.text(notesLines[0]+(notesLines.length>1?'...':''),txtX,py+28);
+        doc.setFont('helvetica','normal');
+      }
       function st(d){return d<0?'VENCIDO':d<=15?d+'d URGENTE':d<=30?d+'d':'OK';}
       var statusX=MR-60;
       doc.setFontSize(6.5);doc.setFont('helvetica','bold');
