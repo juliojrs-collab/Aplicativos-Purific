@@ -11,6 +11,7 @@
 <title>AquaPure</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
@@ -117,8 +118,8 @@ tr:hover td{background:#fafbfc;}
 .chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px;}
 .chip{padding:8px 15px;border-radius:var(--r3);border:1.5px solid var(--border2);cursor:pointer;font-size:13px;font-weight:600;background:var(--surface);color:var(--text2);transition:all .15s;}
 .chip.active{border-color:var(--blue);background:var(--blue-light);color:var(--blue);}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;}
-.modal{background:var(--surface);border-radius:16px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,.2);}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;}
+.modal{background:var(--surface);border-radius:16px;width:100%;max-width:600px;max-height:none;overflow-y:visible;box-shadow:0 25px 60px rgba(0,0,0,.2);margin:auto;}
 .modal-hdr{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;position:sticky;top:0;background:var(--surface);z-index:5;border-bottom:1px solid var(--border);}
 .modal-hdr h2{font-size:16px;font-weight:700;}
 .modal-body{padding:20px;}
@@ -198,8 +199,8 @@ tr:hover td{background:#fafbfc;}
   .dates-grid{grid-template-columns:1fr 1fr;}
   .g3{grid-template-columns:1fr 1fr;}
   .search-input{width:100%;}
-  .overlay{align-items:flex-end;padding:0;}
-  .modal{border-radius:20px 20px 0 0;max-width:100%;}
+  .overlay{align-items:flex-start;padding:0;padding-top:env(safe-area-inset-top,0);}
+  .modal{border-radius:0;max-width:100%;min-height:100%;}
   body{font-size:15px;}
   .li-title{font-size:16px;}
   .li-sub{font-size:14px;}
@@ -222,8 +223,9 @@ tr:hover td{background:#fafbfc;}
 <script>
 var FB_KEY='aq_fb_config';
 var SESS_KEY='aq_session';
-var COLS={co:'companies',pu:'purifiers',ma:'maintenances',te:'technicians'};
+var COLS={co:'companies',pu:'purifiers',ma:'maintenances',te:'technicians',at:'assistencias'};
 var db=null;
+var storage=null;
 var FB_OK=false;
 
 var _FB_DEFAULT={
@@ -242,6 +244,7 @@ function initFirebase(){
     if(!cfg.apiKey||!cfg.projectId)return false;
     if(!firebase.apps.length)firebase.initializeApp(cfg);
     db=firebase.firestore();
+    storage=firebase.storage();
     return true;
   }catch(e){return false;}
 }
@@ -297,6 +300,7 @@ function allAlerts(){
 
 var _photos={before:[],after:[]};
 var _purPhoto='';
+var _atPhoto='';
 
 function compressImg(file,cb){
   var r=new FileReader();
@@ -304,27 +308,53 @@ function compressImg(file,cb){
     var img=new Image();
     img.onload=function(){
       var c=document.createElement('canvas');
-      var w=img.width,h=img.height,MAX=900;
+      var w=img.width,h=img.height,MAX=800;
       if(w>MAX||h>MAX){if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;}}
       c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
-      cb(c.toDataURL('image/jpeg',0.72));
+      cb(c.toDataURL('image/jpeg',0.75));
     };
     img.src=e.target.result;
   };
   r.readAsDataURL(file);
 }
 
-function pickPurPhoto(){
+function uploadPhoto(folder,b64,onSuccess,onError){
+  // Salva base64 direto — comprimido fica ~100KB, dentro do limite do Firestore
+  onSuccess(b64);
+}
+
+function pickPurPhoto(useCamera){
   var inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  if(useCamera)inp.capture='environment';
   inp.onchange=function(e){
     var f=e.target.files[0];if(!f)return;
+    var prev=document.getElementById('pur-photo-prev');
+    if(prev)prev.innerHTML='<div style="padding:16px;text-align:center;color:var(--text3);">⏳ Enviando foto...</div>';
     compressImg(f,function(b64){
-      _purPhoto=b64;
-      var prev=document.getElementById('pur-photo-prev');
-      if(prev)prev.innerHTML='<img src="'+b64+'" style="width:100%;border-radius:8px;max-height:180px;object-fit:cover;margin-bottom:6px;"/><button class="btn btn-ghost btn-sm" onclick="removePurPhoto()">Remover foto</button>';
+      uploadPhoto('purificadores',b64,function(url){
+        _purPhoto=url;
+        var prev2=document.getElementById('pur-photo-prev');
+        if(prev2)prev2.innerHTML='<img src="'+url+'" style="width:100%;border-radius:8px;object-fit:contain;background:#f8fafc;margin-bottom:6px;display:block;"/>'
+          +'<button class="btn btn-ghost btn-sm" onclick="removePurPhoto()">🗑 Remover foto</button>';
+      },function(){
+        showToast('Erro ao processar foto');
+        var prev2=document.getElementById('pur-photo-prev');
+        if(prev2)prev2.innerHTML='<div class="photo-upload-area-btns" id="pur-photo-prev">'+purPhotoBtns()+'</div>';
+      });
     });
   };
   inp.click();
+}
+function purPhotoBtns(){
+  return '<div style="display:flex;gap:8px;justify-content:center;">'
+    +'<button class="btn btn-ghost" onclick="pickPurPhoto(true)">📷 Câmera</button>'
+    +'<button class="btn btn-ghost" onclick="pickPurPhoto(false)">🖼 Galeria</button>'
+    +'</div>';
+}
+function removePurPhoto(){
+  _purPhoto='';
+  var prev=document.getElementById('pur-photo-prev');
+  if(prev)prev.innerHTML=purPhotoBtns();
 }
 
 function removePurPhoto(){
@@ -333,12 +363,63 @@ function removePurPhoto(){
   if(prev)prev.innerHTML='<div class="photo-upload-area" onclick="pickPurPhoto()">Adicionar foto do aparelho (obrigatorio)</div>';
 }
 
-function addPhoto(t){
+function atPhotoBtns(){
+  return '<div style="display:flex;gap:8px;justify-content:center;">'
+    +'<button class="btn btn-ghost" onclick="pickAtPhoto(true)">📷 Câmera</button>'
+    +'<button class="btn btn-ghost" onclick="pickAtPhoto(false)">🖼 Galeria</button>'
+    +'</div>';
+}
+function pickAtPhoto(useCamera){
   var inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  if(useCamera)inp.capture='environment';
+  inp.onchange=function(e){
+    var f=e.target.files[0];if(!f)return;
+    var prev=document.getElementById('at-photo-prev');
+    if(prev)prev.innerHTML='<div style="padding:16px;text-align:center;color:var(--text3);">⏳ Processando...</div>';
+    compressImg(f,function(b64){
+      uploadPhoto('assistencias',b64,function(url){
+        _atPhoto=url;
+        var prev2=document.getElementById('at-photo-prev');
+        if(prev2)prev2.innerHTML='<img src="'+url+'" style="width:100%;border-radius:8px;object-fit:contain;background:#f8fafc;margin-bottom:6px;display:block;"/>'
+          +'<button class="btn btn-ghost btn-sm" onclick="removeAtPhoto()">🗑 Remover foto</button>';
+      },function(){
+        showToast('Erro ao processar foto');
+        var prev2=document.getElementById('at-photo-prev');
+        if(prev2)prev2.innerHTML=atPhotoBtns();
+      });
+    });
+  };
+  inp.click();
+}
+function removeAtPhoto(){
+  _atPhoto='';
+  var prev=document.getElementById('at-photo-prev');
+  if(prev)prev.innerHTML=atPhotoBtns();
+}
+function calcAtTotal(){
+  var mo=parseFloat((document.getElementById('at-mo')||{}).value)||0;
+  var pc=parseFloat((document.getElementById('at-pc')||{}).value)||0;
+  var tot=document.getElementById('at-tot');
+  if(tot)tot.value=(mo+pc).toFixed(2);
+}
+
+function addPhoto(t,useCamera){
+  var inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  if(useCamera)inp.capture='environment';
   inp.onchange=function(e){
     var f=e.target.files[0];if(!f)return;
     if(_photos[t].length>=3){showToast('Maximo 3 fotos');return;}
-    compressImg(f,function(b64){_photos[t].push(b64);renderPhotoPreview();});
+    var phEl=document.getElementById('ph-'+t);
+    if(phEl){var sp=document.createElement('div');sp.id='ph-spinner-'+t;sp.style.cssText='padding:8px;text-align:center;font-size:12px;color:var(--text3);';sp.textContent='⏳ Enviando...';phEl.appendChild(sp);}
+    compressImg(f,function(b64){
+      uploadPhoto('manutencoes/'+t,b64,function(url){
+        var sp=document.getElementById('ph-spinner-'+t);if(sp)sp.remove();
+        _photos[t].push(url);renderPhotoPreview();
+      },function(){
+        var sp=document.getElementById('ph-spinner-'+t);if(sp)sp.remove();
+        showToast('Erro ao processar foto');
+      });
+    });
   };
   inp.click();
 }
@@ -382,23 +463,25 @@ var IC={
   camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>',
   logout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
   bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
-  menu:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>'
+  menu:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>',
+  users:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  clipboard:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>'
 };
 
 var TL={refil:'Refil',manutencao:'Manutencao',ocorrencia:'Ocorrencia',instalacao:'Instalacao',corretiva:'Corretiva',higienizacao:'Higienizacao'};
 var TLF={refil:'🔄 Refil',manutencao:'🔧 Manutencao',ocorrencia:'⚠️ Ocorrencia',instalacao:'✅ Instalacao',corretiva:'🛠️ Corretiva',higienizacao:'🫧 Higienizacao'};
 
-var TABS=['dashboard','companies','purifiers','maintenance','history','reports'];
-var TAB_ICONS={dashboard:IC.home,companies:IC.bld,purifiers:IC.drop,maintenance:IC.wrench,history:IC.history,reports:IC.reports};
-var TAB_NAMES={dashboard:'Inicio',companies:'Empresas',purifiers:'Purificadores',maintenance:'Manutencao',history:'Historico',reports:'Relatorios'};
+var TABS=['dashboard','companies','purifiers','maintenance','history','reports','technicians','assistencia'];
+var TAB_ICONS={dashboard:IC.home,companies:IC.bld,purifiers:IC.drop,maintenance:IC.wrench,history:IC.history,reports:IC.reports,technicians:IC.users,assistencia:IC.clipboard};
+var TAB_NAMES={dashboard:'Inicio',companies:'Empresas',purifiers:'Purificadores',maintenance:'Manutencao',history:'Historico',reports:'Relatorios',technicians:'Tecnicos',assistencia:'OS'};
 
 var S={
   view:'login',stack:[],selC:null,selP:null,modal:null,
-  companies:[],purifiers:[],maintenances:[],technicians:[],
+  companies:[],purifiers:[],maintenances:[],technicians:[],assistencias:[],
   user:null,
   pins:{comercial:'2222',tecnico:'1111'},
   loginProfile:null,loginPin:'',
-  loaded:false,search:'',showInactive:false,
+  loaded:false,techLoaded:false,search:'',showInactive:false,
   selM:null,selMa:null,
   maCid:'',maPid:''
 };
@@ -430,27 +513,46 @@ function loadDemoData(){
   S.loaded=true;
 }
 
-try{var ss=sessionStorage.getItem(SESS_KEY);if(ss){S.user=JSON.parse(ss);S.view='dashboard';}}catch(e){}
+try{var ss=sessionStorage.getItem(SESS_KEY);if(ss){S.user=JSON.parse(ss);}}catch(e){}
+S.user={profile:'comercial',name:'Admin'};
+S.view='dashboard';
 if(!FB_OK)loadDemoData();
 
 function logout(){
-  S.user=null;S.view='login';S.loginProfile=null;S.loginPin='';
-  try{sessionStorage.removeItem(SESS_KEY);}catch(e){}
+  S.view='dashboard';
   render();
 }
 
+function doLogin(){
+  var found=null;
+  if(FB_OK){
+    for(var i=0;i<S.technicians.length;i++){
+      var te=S.technicians[i];
+      if(String(te.pin)===String(S.loginPin)&&te.profile===S.loginProfile){found=te;break;}
+    }
+  }
+  var ok=FB_OK?!!found:true;
+  if(ok){
+    var teName=found?found.name:({comercial:'Comercial',tecnico:'Tecnico'}[S.loginProfile]);
+    S.user={profile:S.loginProfile,name:teName};
+    try{sessionStorage.setItem(SESS_KEY,JSON.stringify(S.user));}catch(e){}
+    S.view='dashboard';S.loginPin='';S._waitingLogin=false;
+  }else{showToast('PIN incorreto');S.loginPin='';S._waitingLogin=false;}
+  render();
+}
 function pinKey(k){
   if(k==='←'){S.loginPin=S.loginPin.slice(0,-1);render();return;}
   if(S.loginPin.length>=4)return;
   S.loginPin+=k;
   if(S.loginPin.length===4){
-    var ok=FB_OK?(S.loginPin===S.pins[S.loginProfile]):true;
-    if(ok){
-      S.user={profile:S.loginProfile,name:{comercial:'Comercial',tecnico:'Tecnico'}[S.loginProfile]};
-      try{sessionStorage.setItem(SESS_KEY,JSON.stringify(S.user));}catch(e){}
-      if(FB_OK&&db)startListeners();
-      S.view='dashboard';S.loginPin='';
-    }else{showToast('PIN incorreto');S.loginPin='';}
+    if(FB_OK&&!S.techLoaded){
+      S._waitingLogin=true;
+      showToast('Aguardando dados...');
+      render();
+      return;
+    }
+    doLogin();
+    return;
   }
   render();
 }
@@ -481,9 +583,10 @@ function openModal(t,d){
   S.modal={t:t,d:d};
   if(t==='ma'){_photos={before:[],after:[]};S.maCid='';S.maPid='';}
   if(t==='pu')_purPhoto=(d.edit&&d.edit.photo)||'';
+  if(t==='at')_atPhoto=(d.edit&&d.edit.fotoEntrada)||'';
   render();
 }
-function closeModal(){S.modal=null;_photos={before:[],after:[]};_purPhoto='';render();}
+function closeModal(){S.modal=null;_photos={before:[],after:[]};_purPhoto='';_atPhoto='';render();}
 function toggleSidebar(){var sb=document.getElementById('sidebar');if(sb)sb.classList.toggle('open');}
 
 function vLogin(){
@@ -525,10 +628,12 @@ function vLogin(){
     +'<button onclick="S.loginProfile=null;S.loginPin=\'\';render()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;margin-bottom:16px;font-family:inherit;">← Voltar</button>'
     +'<div style="text-align:center;margin-bottom:16px;"><div style="font-size:38px;">'+ic+'</div>'
     +'<h2 style="font-size:18px;font-weight:700;margin-top:8px;">'+nm+'</h2>'
-    +(FB_OK?'<p style="font-size:12px;color:var(--text2);margin-top:4px;">Digite seu PIN de 4 digitos</p>':'<p style="font-size:11px;color:var(--amber);margin-top:4px;">Demo: qualquer PIN funciona</p>')
+    +(FB_OK&&!S.techLoaded?'<p style="font-size:11px;color:var(--amber);margin-top:4px;">⏳ Conectando ao servidor...</p>'
+      :FB_OK?'<p style="font-size:12px;color:var(--text2);margin-top:4px;">Digite seu PIN de 4 digitos</p>'
+      :'<p style="font-size:11px;color:var(--amber);margin-top:4px;">Demo: qualquer PIN funciona</p>')
     +'</div>'
     +'<div class="pin-display">'+dots+'</div>'
-    +'<div class="pin-pad">'+pad+'</div>'
+    +(FB_OK&&!S.techLoaded?'<p style="font-size:11px;color:var(--text3);text-align:center;padding:8px;">Aguarde o carregamento...</p>':'<div class="pin-pad">'+pad+'</div>')
     +'</div></div>';
 }
 
@@ -791,7 +896,7 @@ function vPD(){
 
   html+='<div class="'+(isMobile()?'':'detail-grid')+'">';
   html+='<div><div class="card">';
-  if(p.photo)html+='<img src="'+p.photo+'" style="width:100%;border-radius:8px;max-height:200px;object-fit:cover;margin-bottom:12px;"/>';
+  if(p.photo)html+='<img src="'+p.photo+'" style="width:100%;border-radius:8px;object-fit:contain;background:#f8fafc;margin-bottom:12px;display:block;"/>';
   html+='<div class="row"><div><div class="card-title">'+esc(p.br||'')+' '+esc(p.mo||'')+'</div><div class="card-sub">'+(c?esc(c.name):'')+'</div></div>'
     +'<div class="actions-cell">'
     +'<button class="ico-btn" onclick="openModal(\'qr\',{pid:\''+p.id+'\'})">'+IC.qr+'</button>'
@@ -803,6 +908,7 @@ function vPD(){
     +(p.sn?'<span class="badge b-gray">S/N: '+esc(p.sn)+'</span>':'')
     +(p.loc?'<span class="badge b-gray">'+esc(p.loc)+'</span>':'')
     +(p.rfm?'<span class="badge b-purple">Refil: '+esc(p.rfm)+'</span>':'')
+    +(p.volt?'<span class="badge b-gray">⚡ '+esc(p.volt)+'</span>':'')
     +'</div></div>';
 
   if(!p.inactive){
@@ -1138,8 +1244,8 @@ function mPu(ed,cid){
   var p=ed||{};var dc=cid||(S.selC&&S.selC.id)||p.cid||'';var inactive=p.inactive||false;
   var coName='';var coEl=S.companies.filter(function(x){return x.id===(dc||p.cid);})[0];if(coEl)coName=coEl.name;
   var photoHtml=_purPhoto
-    ?'<img src="'+_purPhoto+'" style="width:100%;border-radius:8px;max-height:180px;object-fit:cover;margin-bottom:6px;"/><button class="btn btn-ghost btn-sm" onclick="removePurPhoto()">Remover foto</button>'
-    :'<div class="photo-upload-area" onclick="pickPurPhoto()">Adicionar foto do aparelho (obrigatorio)</div>';
+    ?'<img src="'+_purPhoto+'" style="width:100%;border-radius:8px;object-fit:contain;background:#f8fafc;margin-bottom:6px;display:block;"/><button class="btn btn-ghost btn-sm" onclick="removePurPhoto()">🗑 Remover foto</button>'
+    :purPhotoBtns();
   var coSel='';
   if(!ed&&!dc){
     coSel='<div class="field"><label>Empresa *</label><select id="mcid"><option value="">Selecione...</option>';
@@ -1153,16 +1259,11 @@ function mPu(ed,cid){
     +'<div class="g2"><div class="field"><label>N empresa</label><input id="mcn" value="'+esc(p.cn||'')+'" placeholder="001"/></div><div class="field"><label>N serie</label><input id="msn" value="'+esc(p.sn||'')+'"/></div></div>'
     +'<div class="g2"><div class="field"><label>Marca *</label><input id="mbr" value="'+esc(p.br||'')+'" placeholder="Everest, IBBL..."/></div><div class="field"><label>Modelo *</label><input id="mmo" value="'+esc(p.mo||'')+'"/></div></div>'
     +'<div class="g2"><div class="field"><label>Localizacao</label><input id="mloc" value="'+esc(p.loc||'')+'"/></div><div class="field"><label>Modelo do Refil</label><input id="mrfm" value="'+esc(p.rfm||'')+'" placeholder="Ex: EVREF-A"/></div></div>'
-    +'<div class="field"><label>Data de instalacao</label><input type="date" id="mins" value="'+(p.ins||today())+'"/></div>'
+    +'<div class="g2"><div class="field"><label>Data de instalacao</label><input type="date" id="mins" value="'+(p.ins||today())+'"/></div>'
+    +'<div class="field"><label>Voltagem</label><select id="mvolt"><option value=""'+((!p.volt)?' selected':'')+'>Nao informado</option><option value="110V"'+(p.volt==='110V'?' selected':'')+'>110V</option><option value="220V"'+(p.volt==='220V'?' selected':'')+'>220V</option><option value="Bivolt"'+(p.volt==='Bivolt'?' selected':'')+'>Bivolt</option></select></div></div>'
     +'<div class="section-box" style="border-color:var(--green)"><div class="section-box-title" style="color:var(--green)">Troca de Refil</div>'
     +'<div class="g2"><div class="field"><label>Ultimo refil</label><input type="date" id="mlf" value="'+(p.lf||today())+'"/></div>'
     +'<div class="field"><label>Intervalo</label><select id="mfim"><option value="3"'+(parseInt(p.fim)===3?' selected':'')+'>3 meses</option><option value="4"'+(parseInt(p.fim)===4?' selected':'')+'>4 meses</option><option value="6"'+((!p.fim||parseInt(p.fim)===6)?' selected':'')+'>6 meses</option><option value="8"'+(parseInt(p.fim)===8?' selected':'')+'>8 meses</option><option value="12"'+(parseInt(p.fim)===12?' selected':'')+'>12 meses</option></select></div></div></div>'
-    +'<div class="section-box" style="border-color:var(--amber)"><div class="section-box-title" style="color:var(--amber)">Manutencao Periodica</div>'
-    +'<div class="g2"><div class="field"><label>Ultima manut.</label><input type="date" id="mlm" value="'+(p.lm||today())+'"/></div>'
-    +'<div class="field"><label>Intervalo</label><select id="mmim"><option value="6"'+(parseInt(p.mim)===6?' selected':'')+'>6 meses</option><option value="8"'+(parseInt(p.mim)===8?' selected':'')+'>8 meses</option><option value="12"'+((!p.mim||parseInt(p.mim)===12)?' selected':'')+'>12 meses</option><option value="18"'+(parseInt(p.mim)===18?' selected':'')+'>18 meses</option><option value="24"'+(parseInt(p.mim)===24?' selected':'')+'>24 meses</option></select></div></div></div>'
-    +'<div class="section-box" style="border-color:#ea580c"><div class="section-box-title" style="color:#ea580c">Manutencao Corretiva</div>'
-    +'<div class="g2"><div class="field"><label>Ultima corretiva</label><input type="date" id="mlmc" value="'+(p.lmc||'')+'"/></div>'
-    +'<div class="field"><label>Intervalo</label><select id="mnmcI"><option value="6"'+(parseInt(p.nmcI)===6?' selected':'')+'>6 meses</option><option value="8"'+(parseInt(p.nmcI)===8?' selected':'')+'>8 meses</option><option value="12"'+((!p.nmcI||parseInt(p.nmcI)===12)?' selected':'')+'>12 meses</option><option value="18"'+(parseInt(p.nmcI)===18?' selected':'')+'>18 meses</option><option value="24"'+(parseInt(p.nmcI)===24?' selected':'')+'>24 meses</option></select></div></div></div>'
     +'<div class="section-box" style="border-color:var(--teal)"><div class="section-box-title" style="color:var(--teal)">Higienizacao</div>'
     +'<div class="g2"><div class="field"><label>Ultima higieniz.</label><input type="date" id="mlhg" value="'+(p.lhg||'')+'"/></div>'
     +'<div class="field"><label>Intervalo</label><select id="mnhgI"><option value="3"'+(parseInt(p.nhgI)===3?' selected':'')+'>3 meses</option><option value="4"'+(parseInt(p.nhgI)===4?' selected':'')+'>4 meses</option><option value="6"'+(parseInt(p.nhgI)===6?' selected':'')+'>6 meses</option><option value="8"'+(parseInt(p.nhgI)===8?' selected':'')+'>8 meses</option><option value="12"'+((!p.nhgI||parseInt(p.nhgI)===12)?' selected':'')+'>12 meses</option></select></div></div></div>'
@@ -1174,7 +1275,7 @@ function mPu(ed,cid){
 function mMa(pid){
   var p=pid?S.purifiers.filter(function(x){return x.id===pid;})[0]:null;
   var techOpts='<option value="">Selecione...</option>';
-  for(var i=0;i<S.technicians.length;i++)if(S.technicians[i].active)techOpts+='<option value="'+esc(S.technicians[i].name)+'">'+esc(S.technicians[i].name)+'</option>';
+  for(var i=0;i<S.technicians.length;i++){var tet=S.technicians[i];if(tet.active!==false)techOpts+='<option value="'+esc(tet.name)+'">'+esc(tet.name)+'</option>';}
 
   var selCid=S.maCid||'';
   var pursOfCo=selCid?S.purifiers.filter(function(x){return x.cid===selCid&&!x.inactive;}):[];
@@ -1221,10 +1322,10 @@ function mMa(pid){
     +'<div class="field" id="nhg-f" style="display:none"><label>Prox. Higienizacao</label><input type="date" id="mnhg" value="'+addMon(today(),12)+'"/></div>'
     +'</div></div>'
     +'<div class="field"><label>Foto ANTES do servico</label>'
-    +'<div class="photo-upload-area" onclick="addPhoto(\'before\')">Selecionar imagem</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:6px;"><button class="btn btn-ghost btn-sm" onclick="addPhoto(\'before\',true)">📷 Câmera</button><button class="btn btn-ghost btn-sm" onclick="addPhoto(\'before\',false)">🖼 Galeria</button></div>'
     +'<div class="photo-grid" id="ph-before"></div></div>'
     +'<div class="field"><label>Foto DEPOIS do servico</label>'
-    +'<div class="photo-upload-area" onclick="addPhoto(\'after\')">Selecionar imagem</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:6px;"><button class="btn btn-ghost btn-sm" onclick="addPhoto(\'after\',true)">📷 Câmera</button><button class="btn btn-ghost btn-sm" onclick="addPhoto(\'after\',false)">🖼 Galeria</button></div>'
     +'<div class="photo-grid" id="ph-after"></div></div>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">'
     +'<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>'
@@ -1247,6 +1348,74 @@ function mQR(pid){
     +'<button class="btn btn-ghost" style="flex:1;justify-content:center;" onclick="closeModal()">Fechar</button>'
     +'<button class="btn btn-primary" style="flex:1;justify-content:center;" onclick="window.print()">Imprimir</button>'
     +'</div>';
+}
+
+function vTechnicians(){
+  if(!isComercial()){return '<div class="empty"><div class="empty-ico">🔒</div><div>Acesso restrito ao perfil Comercial</div></div>';}
+  var html='<div class="page-header"><div class="page-title">Tecnicos</div>'
+    +'<button class="btn btn-primary btn-sm" onclick="openModal(\'te\')">'+IC.plus+' Novo Tecnico</button></div>';
+  if(S.technicians.length===0){
+    return html+'<div class="empty"><div class="empty-ico">👷</div><div>Nenhum tecnico cadastrado</div></div>';
+  }
+  html+='<div class="tbl-wrap"><table><thead><tr><th>Nome</th><th>PIN</th><th>Perfil</th><th>Acoes</th></tr></thead><tbody>';
+  for(var i=0;i<S.technicians.length;i++){
+    var te=S.technicians[i];
+    var pinMask='••••';
+    var profileLabel=te.profile==='comercial'?'💼 Comercial':'🔧 Tecnico';
+    var profileBadge=te.profile==='comercial'?'b-blue':'b-green';
+    html+='<tr>'
+      +'<td style="font-weight:600;">'+esc(te.name||'')+'</td>'
+      +'<td style="font-family:monospace;letter-spacing:3px;">'+pinMask+'</td>'
+      +'<td><span class="badge '+profileBadge+'">'+profileLabel+'</span></td>'
+      +'<td><div class="actions-cell">'
+      +'<button class="ico-btn" onclick="openModal(\'te\',{edit:S.technicians.filter(function(x){return x.id===\''+te.id+'\'})[0]})">'+IC.edit+'</button>'
+      +'<button class="ico-btn danger" onclick="delTe(\''+te.id+'\')">'+IC.trash+'</button>'
+      +'</div></td></tr>';
+  }
+  html+='</tbody></table></div>';
+  return html;
+}
+
+function mTe(ed){
+  var te=ed||{};
+  return '<div class="field"><label>Nome *</label><input id="te-name" value="'+esc(te.name||'')+'" placeholder="Nome completo"/></div>'
+    +'<div class="g2">'
+    +'<div class="field"><label>PIN de 4 digitos *</label><input id="te-pin" type="number" min="0" max="9999" value="'+esc(te.pin||'')+'" placeholder="Ex: 1234"/></div>'
+    +'<div class="field"><label>Perfil *</label><select id="te-profile">'
+    +'<option value="tecnico"'+(te.profile==='tecnico'||!te.profile?' selected':'')+'>Tecnico</option>'
+    +'<option value="comercial"'+(te.profile==='comercial'?' selected':'')+'>Comercial</option>'
+    +'</select></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="svTe(\''+(ed?ed.id:'')+'\')">Salvar</button></div>';
+}
+
+function svTe(eid){
+  var name=(document.getElementById('te-name')||{}).value||'';
+  name=name.trim();
+  var pin=(document.getElementById('te-pin')||{}).value||'';
+  pin=pin.trim();
+  var profile=(document.getElementById('te-profile')||{}).value||'tecnico';
+  if(!name){alert('Informe o nome');return;}
+  if(!pin||pin.length!==4||isNaN(parseInt(pin))){alert('PIN deve ter 4 digitos');return;}
+  var dup=S.technicians.filter(function(t){return t.pin===pin&&t.id!==eid;});
+  if(dup.length>0){alert('Este PIN ja esta em uso por '+dup[0].name);return;}
+  var it={name:name,pin:pin,profile:profile,createdAt:new Date().toISOString()};
+  if(!FB_OK||!db){
+    if(eid){for(var i=0;i<S.technicians.length;i++)if(S.technicians[i].id===eid){for(var k in it)S.technicians[i][k]=it[k];break;}}
+    else{it.id=uid();S.technicians.push(it);}
+    showToast('Tecnico salvo!');closeModal();render();return;
+  }
+  if(eid)db.collection(COLS.te).doc(eid).update(it).then(function(){showToast('Tecnico salvo!');closeModal();}).catch(function(e){alert('Erro: '+e.message);});
+  else db.collection(COLS.te).add(it).then(function(){showToast('Tecnico salvo!');closeModal();}).catch(function(e){alert('Erro: '+e.message);});
+}
+
+function delTe(id){
+  if(!confirm('Excluir este tecnico?'))return;
+  if(!FB_OK||!db){
+    S.technicians=S.technicians.filter(function(x){return x.id!==id;});
+    render();showToast('Tecnico excluido');return;
+  }
+  db.collection(COLS.te).doc(id).delete().then(function(){showToast('Tecnico excluido');}).catch(function(e){alert('Erro: '+e.message);});
 }
 
 function selType(v){
@@ -1325,16 +1494,12 @@ function svP(eid,cidArg){
   if(!br||!mo){alert('Preencha Marca e Modelo');return;}
   var lf=document.getElementById('mlf')?document.getElementById('mlf').value:today();
   var fim=parseInt(document.getElementById('mfim')?document.getElementById('mfim').value:4)||4;
-  var lm=document.getElementById('mlm')?document.getElementById('mlm').value:today();
-  var mim=parseInt(document.getElementById('mmim')?document.getElementById('mmim').value:12)||12;
-  var lmc=document.getElementById('mlmc')?document.getElementById('mlmc').value:'';
-  var nmcI=parseInt(document.getElementById('mnmcI')?document.getElementById('mnmcI').value:12)||12;
   var lhg=document.getElementById('mlhg')?document.getElementById('mlhg').value:'';
   var nhgI=parseInt(document.getElementById('mnhgI')?document.getElementById('mnhgI').value:12)||12;
   var activeToggle=document.getElementById('minactive');
   var inactive=eid?(activeToggle?!activeToggle.checked:false):false;
   var existingPhoto=eid?(S.purifiers.filter(function(x){return x.id===eid;})[0]||{}).photo||'':'';
-  var it={cid:cid,cn:document.getElementById('mcn')?document.getElementById('mcn').value:'',sn:document.getElementById('msn')?document.getElementById('msn').value:'',br:br,mo:mo,loc:document.getElementById('mloc')?document.getElementById('mloc').value:'',rfm:document.getElementById('mrfm')?document.getElementById('mrfm').value:'',ins:document.getElementById('mins')?document.getElementById('mins').value:today(),lf:lf,fim:fim,nf:addMon(lf,fim),lm:lm,mim:mim,nm:addMon(lm,mim),lmc:lmc,nmcI:nmcI,nmc:lmc?addMon(lmc,nmcI):'',lhg:lhg,nhgI:nhgI,nhg:lhg?addMon(lhg,nhgI):'',notes:document.getElementById('mnotes')?document.getElementById('mnotes').value:'',inactive:inactive,photo:_purPhoto||existingPhoto};
+  var it={cid:cid,cn:document.getElementById('mcn')?document.getElementById('mcn').value:'',sn:document.getElementById('msn')?document.getElementById('msn').value:'',br:br,mo:mo,loc:document.getElementById('mloc')?document.getElementById('mloc').value:'',rfm:document.getElementById('mrfm')?document.getElementById('mrfm').value:'',volt:document.getElementById('mvolt')?document.getElementById('mvolt').value:'',ins:document.getElementById('mins')?document.getElementById('mins').value:today(),lf:lf,fim:fim,nf:addMon(lf,fim),lhg:lhg,nhgI:nhgI,nhg:lhg?addMon(lhg,nhgI):'',notes:document.getElementById('mnotes')?document.getElementById('mnotes').value:'',inactive:inactive,photo:_purPhoto||existingPhoto};
   if(!FB_OK||!db){
     if(eid){for(var i=0;i<S.purifiers.length;i++)if(S.purifiers[i].id===eid){for(var k in it)S.purifiers[i][k]=it[k];break;}}
     else{it.id=uid();S.purifiers.push(it);}
@@ -1394,6 +1559,230 @@ function delM(id){
   db.collection(COLS.ma).doc(id).delete().then(function(){showToast('Registro excluido');}).catch(function(e){alert('Erro: '+e.message);});
 }
 
+/* ======== MÓDULO ASSISTÊNCIA TÉCNICA (OS) ======== */
+
+function atStatusBadge(st){
+  if(st==='recebido')return{t:'Recebido',c:'b-blue'};
+  if(st==='em_analise')return{t:'Em Análise',c:'b-amber'};
+  if(st==='aguardando_aprovacao')return{t:'Aguard. Aprovação',c:'b-purple'};
+  if(st==='aprovado')return{t:'Aprovado',c:'b-green'};
+  if(st==='em_servico')return{t:'Em Serviço',c:'b-amber'};
+  if(st==='concluido')return{t:'Concluído',c:'b-green'};
+  if(st==='entregue')return{t:'Entregue',c:'b-gray'};
+  return{t:st||'?',c:'b-gray'};
+}
+
+function vAssistencia(){
+  var fSt=(document.getElementById('at-fst')||{}).value||'';
+  var fQ=((document.getElementById('at-fsq')||{}).value||'').toLowerCase();
+  var list=S.assistencias.filter(function(a){
+    if(fSt&&a.status!==fSt)return false;
+    if(fQ&&(a.nomeCliente||'').toLowerCase().indexOf(fQ)<0)return false;
+    return true;
+  });
+  var h='<div class="page-header"><div><h2>Assistência Técnica</h2><p class="page-sub">'+S.assistencias.length+' ordens de serviço</p></div>'
+    +'<button class="btn btn-primary" onclick="openModal(\'at\')">'+IC.plus+' Nova OS</button></div>';
+  h+='<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">'
+    +'<select id="at-fst" onchange="render()" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);">'
+    +'<option value="">Todos os status</option>'
+    +'<option value="recebido"'+(fSt==='recebido'?' selected':'')+'>Recebido</option>'
+    +'<option value="em_analise"'+(fSt==='em_analise'?' selected':'')+'>Em Análise</option>'
+    +'<option value="aguardando_aprovacao"'+(fSt==='aguardando_aprovacao'?' selected':'')+'>Aguard. Aprovação</option>'
+    +'<option value="aprovado"'+(fSt==='aprovado'?' selected':'')+'>Aprovado</option>'
+    +'<option value="em_servico"'+(fSt==='em_servico'?' selected':'')+'>Em Serviço</option>'
+    +'<option value="concluido"'+(fSt==='concluido'?' selected':'')+'>Concluído</option>'
+    +'<option value="entregue"'+(fSt==='entregue'?' selected':'')+'>Entregue</option>'
+    +'</select>'
+    +'<input id="at-fsq" value="'+esc(fQ)+'" oninput="render()" placeholder="Buscar cliente..." style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;flex:1;min-width:140px;background:var(--surface);">'
+    +'</div>';
+  if(!list.length){return h+'<div style="text-align:center;padding:60px 20px;color:var(--text3);">Nenhuma OS encontrada.</div>';}
+  if(isMobile()){
+    h+='<div>';
+    list.forEach(function(a){
+      var sb=atStatusBadge(a.status);
+      h+='<div class="li">'
+        +'<div class="li-left">'
+        +'<div class="li-title">'+esc(a.nomeCliente||'-')+(a.numeroOS?'<span class="badge b-gray" style="margin-left:6px;">OS '+esc(a.numeroOS)+'</span>':'')+'</div>'
+        +'<div class="li-sub">'+esc((a.marcaEquip||'')+' '+(a.modeloEquip||''))+(a.dataEntrada?' · '+fmtDate(a.dataEntrada):'')+'</div>'
+        +'</div>'
+        +'<div class="actions-cell" onclick="event.stopPropagation()">'
+        +'<span class="badge '+sb.c+'">'+sb.t+'</span>'
+        +'<button class="ico-btn" onclick="openModal(\'at\',{edit:'+JSON.stringify(a).replace(/"/g,'&quot;')+'})" title="Editar recepção">'+IC.edit+'</button>'
+        +'<button class="ico-btn" onclick="openModal(\'ator\',{edit:'+JSON.stringify(a).replace(/"/g,'&quot;')+'})" title="Atualizar técnico">'+IC.wrench+'</button>'
+        +(canDelete()?'<button class="ico-btn danger" onclick="delAt(\''+a.id+'\')" title="Excluir">'+IC.trash+'</button>':'')
+        +'</div>'
+        +'</div>';
+    });
+    h+='</div>';
+  }else{
+    h+='<div class="tbl-wrap"><table><thead><tr><th>N° OS</th><th>Data Entrada</th><th>Cliente</th><th>Equipamento</th><th>Vendedor</th><th>Status</th><th>Ações</th></tr></thead><tbody>';
+    list.forEach(function(a){
+      var sb=atStatusBadge(a.status);
+      h+='<tr>'
+        +'<td>'+(a.numeroOS?'<span class="badge b-gray">'+esc(a.numeroOS)+'</span>':'-')+'</td>'
+        +'<td>'+fmtDate(a.dataEntrada)+'</td>'
+        +'<td>'+esc(a.nomeCliente||'-')+(a.telefoneCliente?'<br><span style="font-size:11px;color:var(--text3);">'+esc(a.telefoneCliente)+'</span>':'')+'</td>'
+        +'<td>'+esc((a.marcaEquip||'')+' '+(a.modeloEquip||''))+(a.nSerieEquip?'<br><span style="font-size:11px;color:var(--text3);">S/N: '+esc(a.nSerieEquip)+'</span>':'')+'</td>'
+        +'<td>'+esc(a.vendedorResponsavel||'-')+'</td>'
+        +'<td><span class="badge '+sb.c+'">'+sb.t+'</span></td>'
+        +'<td onclick="event.stopPropagation()">'
+        +'<button class="ico-btn" onclick="openModal(\'at\',{edit:'+JSON.stringify(a).replace(/"/g,'&quot;')+'})" title="Editar recepção">'+IC.edit+'</button>'
+        +'<button class="ico-btn" onclick="openModal(\'ator\',{edit:'+JSON.stringify(a).replace(/"/g,'&quot;')+'})" title="Atualizar técnico / orçamento">'+IC.wrench+'</button>'
+        +(canDelete()?'<button class="ico-btn danger" onclick="delAt(\''+a.id+'\')" title="Excluir">'+IC.trash+'</button>':'')
+        +'</td>'
+        +'</tr>';
+    });
+    h+='</tbody></table></div>';
+  }
+  return h;
+}
+
+function mAt(ed){
+  var p=ed||{};
+  var photoArea=_atPhoto
+    ?'<img src="'+_atPhoto+'" style="width:100%;border-radius:8px;object-fit:contain;background:#f8fafc;margin-bottom:6px;display:block;"/><button class="btn btn-ghost btn-sm" onclick="removeAtPhoto()">🗑 Remover foto</button>'
+    :atPhotoBtns();
+  var condOpts=['','Bom','Razoável','Ruim','Outro'];
+  var condSel=condOpts.map(function(o){return'<option value="'+esc(o)+'"'+(p.condicaoEntrada===o?' selected':'')+'>'+esc(o||'Selecione...')+'</option>';}).join('');
+  var eid=ed?ed.id:'';
+  return '<div class="g2">'
+    +'<div class="field"><label>N° OS (outro sistema)</label><input id="at-nos" value="'+esc(p.numeroOS||'')+'" placeholder="Ex: 2025-001"/></div>'
+    +'<div class="field"><label>Data de Entrada</label><input id="at-data" type="date" value="'+(p.dataEntrada||today())+'"/></div>'
+    +'</div>'
+    +'<div class="g2">'
+    +'<div class="field"><label>Nome do Cliente *</label><input id="at-nome" value="'+esc(p.nomeCliente||'')+'" placeholder="Nome completo"/></div>'
+    +'<div class="field"><label>Telefone</label><input id="at-tel" value="'+esc(p.telefoneCliente||'')+'" placeholder="(00) 00000-0000"/></div>'
+    +'</div>'
+    +'<div class="g2">'
+    +'<div class="field"><label>Marca *</label><input id="at-marca" value="'+esc(p.marcaEquip||'')+'" placeholder="Ex: Electrolux"/></div>'
+    +'<div class="field"><label>Modelo *</label><input id="at-modelo" value="'+esc(p.modeloEquip||'')+'" placeholder="Ex: PA30G"/></div>'
+    +'</div>'
+    +'<div class="g2">'
+    +'<div class="field"><label>N° Série</label><input id="at-nserie" value="'+esc(p.nSerieEquip||'')+'" placeholder="Número de série"/></div>'
+    +'<div class="field"><label>Condição de Entrada</label><select id="at-cond">'+condSel+'</select></div>'
+    +'</div>'
+    +'<div class="field"><label>Problema Relatado pelo Cliente</label><textarea id="at-problema" rows="3" style="resize:none;">'+esc(p.problemaRelatado||'')+'</textarea></div>'
+    +'<div class="field"><label>Vendedor Responsável</label><input id="at-vendedor" value="'+esc(p.vendedorResponsavel||(ed?'':S.user&&S.user.name||''))+'"/></div>'
+    +'<div class="field"><label>Foto do Aparelho (entrada)</label><div id="at-photo-prev" style="border:1px dashed var(--border2);border-radius:8px;padding:12px;">'+photoArea+'</div></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">'
+    +'<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>'
+    +'<button class="btn btn-primary" onclick="svAt(\''+eid+'\')">Salvar OS</button>'
+    +'</div>';
+}
+
+function mAtOrc(ed){
+  if(!ed)return '<p style="padding:16px;color:var(--text3);">OS não encontrada.</p>';
+  var p=ed;
+  var eid=ed.id;
+  var techOpts='<option value="">Selecione...</option>';
+  S.technicians.forEach(function(tc){techOpts+='<option value="'+esc(tc.name)+'"'+(p.tecnicoResponsavel===tc.name?' selected':'')+'>'+esc(tc.name)+'</option>';});
+  var statusOpts=[
+    {v:'recebido',l:'Recebido'},
+    {v:'em_analise',l:'Em Análise'},
+    {v:'aguardando_aprovacao',l:'Aguard. Aprovação'},
+    {v:'aprovado',l:'Aprovado'},
+    {v:'em_servico',l:'Em Serviço'},
+    {v:'concluido',l:'Concluído'},
+    {v:'entregue',l:'Entregue'}
+  ].map(function(o){return'<option value="'+o.v+'"'+(p.status===o.v?' selected':'')+'>'+o.l+'</option>';}).join('');
+  var mo=(p.valorMaoObra||0).toFixed(2);
+  var pc=(p.valorPecas||0).toFixed(2);
+  var tot=(p.valorTotal||0).toFixed(2);
+  return '<div style="background:var(--blue-light);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;">'
+    +'<strong>'+esc(p.nomeCliente||'-')+'</strong>'+(p.telefoneCliente?' · '+esc(p.telefoneCliente):'')+' — '+esc((p.marcaEquip||'')+' '+(p.modeloEquip||''))
+    +(p.numeroOS?'<span class="badge b-gray" style="margin-left:8px;">OS '+esc(p.numeroOS)+'</span>':'')
+    +'</div>'
+    +'<div class="g2">'
+    +'<div class="field"><label>Status</label><select id="ator-status">'+statusOpts+'</select></div>'
+    +'<div class="field"><label>Técnico Responsável</label><select id="ator-tech" onchange="document.getElementById(\'ator-techfree\').value=this.options[this.selectedIndex].value">'+techOpts+'</select></div>'
+    +'</div>'
+    +'<div class="field"><label>Ou digitar nome do técnico</label><input id="ator-techfree" value="'+esc(p.tecnicoResponsavel||'')+'" placeholder="Nome livre"/></div>'
+    +'<div class="field"><label>Diagnóstico Técnico</label><textarea id="ator-diag" rows="3" style="resize:none;">'+esc(p.diagnostico||'')+'</textarea></div>'
+    +'<div class="field"><label>Serviços a Realizar</label><textarea id="ator-servicos" rows="3" style="resize:none;">'+esc(p.servicosRealizar||'')+'</textarea></div>'
+    +'<div class="field"><label>Peças Necessárias</label><textarea id="ator-pecas" rows="2" style="resize:none;">'+esc(p.pecasNecessarias||'')+'</textarea></div>'
+    +'<div class="section-box"><div class="section-box-title">Orçamento</div>'
+    +'<div class="g3">'
+    +'<div class="field"><label>Mão de Obra R$</label><input id="at-mo" type="number" step="0.01" min="0" value="'+mo+'" oninput="calcAtTotal()"/></div>'
+    +'<div class="field"><label>Peças R$</label><input id="at-pc" type="number" step="0.01" min="0" value="'+pc+'" oninput="calcAtTotal()"/></div>'
+    +'<div class="field"><label>Total R$</label><input id="at-tot" type="number" value="'+tot+'" disabled style="background:var(--surface2);"/></div>'
+    +'</div></div>'
+    +'<div class="field"><label>Observações</label><textarea id="ator-obs" rows="2" style="resize:none;">'+esc(p.observacoesTecnicas||'')+'</textarea></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">'
+    +'<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>'
+    +'<button class="btn btn-primary" onclick="svAtOrc(\''+eid+'\')">Salvar</button>'
+    +'</div>';
+}
+
+function svAt(eid){
+  var nome=(document.getElementById('at-nome')||{}).value||'';
+  var marca=(document.getElementById('at-marca')||{}).value||'';
+  var modelo=(document.getElementById('at-modelo')||{}).value||'';
+  nome=nome.trim();marca=marca.trim();modelo=modelo.trim();
+  if(!nome){alert('Informe o nome do cliente.');return;}
+  if(!marca||!modelo){alert('Informe a marca e o modelo do aparelho.');return;}
+  var existing=eid?(S.assistencias.filter(function(x){return x.id===eid;})[0]||{}):null;
+  var it={
+    numeroOS:(document.getElementById('at-nos')||{}).value||'',
+    dataEntrada:(document.getElementById('at-data')||{}).value||today(),
+    nomeCliente:nome,
+    telefoneCliente:(document.getElementById('at-tel')||{}).value||'',
+    marcaEquip:marca,
+    modeloEquip:modelo,
+    nSerieEquip:(document.getElementById('at-nserie')||{}).value||'',
+    problemaRelatado:(document.getElementById('at-problema')||{}).value||'',
+    condicaoEntrada:(document.getElementById('at-cond')||{}).value||'',
+    vendedorResponsavel:(document.getElementById('at-vendedor')||{}).value||'',
+    fotoEntrada:_atPhoto||(existing&&existing.fotoEntrada)||'',
+    status:(existing&&existing.status)||'recebido',
+    createdAt:(existing&&existing.createdAt)||new Date().toISOString(),
+    updatedAt:new Date().toISOString()
+  };
+  if(!FB_OK||!db){
+    if(eid){var idx=S.assistencias.findIndex(function(x){return x.id===eid;});if(idx>=0)S.assistencias[idx]=Object.assign({},S.assistencias[idx],it);}
+    else{it.id=uid();S.assistencias.unshift(it);}
+    showToast(eid?'OS atualizada!':'OS criada!');closeModal();return;
+  }
+  if(eid){
+    db.collection(COLS.at).doc(eid).update(it).then(function(){showToast('OS atualizada!');closeModal();}).catch(function(e){alert('Erro: '+e.message);});
+  }else{
+    db.collection(COLS.at).add(it).then(function(){showToast('OS criada!');closeModal();}).catch(function(e){alert('Erro: '+e.message);});
+  }
+}
+
+function svAtOrc(eid){
+  if(!eid){alert('OS não encontrada.');return;}
+  var tech=(document.getElementById('ator-techfree')||{}).value||(document.getElementById('ator-tech')||{}).value||'';
+  var mo=parseFloat((document.getElementById('at-mo')||{}).value)||0;
+  var pc=parseFloat((document.getElementById('at-pc')||{}).value)||0;
+  var upd={
+    status:(document.getElementById('ator-status')||{}).value||'em_analise',
+    tecnicoResponsavel:tech,
+    diagnostico:(document.getElementById('ator-diag')||{}).value||'',
+    servicosRealizar:(document.getElementById('ator-servicos')||{}).value||'',
+    pecasNecessarias:(document.getElementById('ator-pecas')||{}).value||'',
+    valorMaoObra:mo,
+    valorPecas:pc,
+    valorTotal:mo+pc,
+    observacoesTecnicas:(document.getElementById('ator-obs')||{}).value||'',
+    updatedAt:new Date().toISOString()
+  };
+  if(!FB_OK||!db){
+    var idx=S.assistencias.findIndex(function(x){return x.id===eid;});
+    if(idx>=0){for(var k in upd)S.assistencias[idx][k]=upd[k];}
+    showToast('OS atualizada!');closeModal();return;
+  }
+  db.collection(COLS.at).doc(eid).update(upd).then(function(){showToast('OS atualizada!');closeModal();}).catch(function(e){alert('Erro: '+e.message);});
+}
+
+function delAt(id){
+  if(!canDelete())return;
+  if(!confirm('Excluir esta OS?'))return;
+  if(!FB_OK||!db){S.assistencias=S.assistencias.filter(function(x){return x.id!==id;});render();showToast('OS excluída');return;}
+  db.collection(COLS.at).doc(id).delete().then(function(){showToast('OS excluída');}).catch(function(e){alert('Erro: '+e.message);});
+}
+
+/* ======== FIM MÓDULO OS ======== */
+
 function connectFirebase(){
   var raw=document.getElementById('fb-cfg')?document.getElementById('fb-cfg').value.trim():'';
   try{
@@ -1402,13 +1791,22 @@ function connectFirebase(){
     var cfg=JSON.parse(json);
     if(!cfg.apiKey||!cfg.projectId)throw new Error('Incompleto');
     if(firebase.apps.length)firebase.apps.forEach(function(a){a.delete();});
-    firebase.initializeApp(cfg);db=firebase.firestore();FB_OK=true;
+    firebase.initializeApp(cfg);db=firebase.firestore();storage=firebase.storage();FB_OK=true;
     try{localStorage.setItem(FB_KEY,JSON.stringify(cfg));}catch(e){}
-    startListeners();showToast('Firebase conectado!');S.loginProfile=null;render();
+    startListeners();
+    db.collection(COLS.te).limit(1).get().then(function(snap){
+      if(snap.empty){
+        db.collection(COLS.te).add({name:'Admin',pin:'1234',profile:'comercial',createdAt:new Date().toISOString()}).then(function(){
+          showToast('Tecnico admin criado! PIN: 1234');
+        }).catch(function(){});
+      }
+    }).catch(function(){});
+    showToast('Firebase conectado!');S.loginProfile=null;render();
   }catch(e){alert('Erro: '+e.message);}
 }
 
 var unsubs=[];
+var _adminChecked=false;
 function startListeners(){
   for(var i=0;i<unsubs.length;i++)unsubs[i]();unsubs=[];
   var cols=[[COLS.co,'companies'],[COLS.pu,'purifiers'],[COLS.te,'technicians']];
@@ -1416,12 +1814,28 @@ function startListeners(){
     (function(col,key){
       unsubs.push(db.collection(col).onSnapshot(function(snap){
         S[key]=snap.docs.map(function(d){var o={id:d.id};var data=d.data();for(var k in data)o[k]=data[k];return o;});
+        if(key==='technicians'){
+          S.techLoaded=true;
+          if(!_adminChecked){
+            _adminChecked=true;
+            if(snap.empty){
+              db.collection(COLS.te).add({name:'Admin',pin:'1234',profile:'comercial',createdAt:new Date().toISOString()}).then(function(){
+                showToast('Acesso inicial: perfil Comercial, PIN 1234');
+              }).catch(function(){});
+            }
+          }
+          if(S._waitingLogin&&S.loginPin.length===4){doLogin();return;}
+        }
         S.loaded=true;render();
       }));
     })(cols[i][0],cols[i][1]);
   }
   unsubs.push(db.collection(COLS.ma).orderBy('date','desc').onSnapshot(function(snap){
     S.maintenances=snap.docs.map(function(d){var o={id:d.id};var data=d.data();for(var k in data)o[k]=data[k];return o;});
+    render();
+  }));
+  unsubs.push(db.collection(COLS.at).orderBy('dataEntrada','desc').onSnapshot(function(snap){
+    S.assistencias=snap.docs.map(function(d){var o={id:d.id};var data=d.data();for(var k in data)o[k]=data[k];return o;});
     render();
   }));
 }
@@ -1444,6 +1858,12 @@ function exportPDF(){
   doc.text('Gerado em: '+nowStr,MR,21,{align:'right'});
   doc.setTextColor(30,30,30);
   var purs=(selId?S.purifiers.filter(function(p){return p.cid===selId;}):S.purifiers).filter(function(p){return!p.inactive;});
+  purs=purs.slice().sort(function(a,b){
+    var na=parseInt(a.cn,10),nb=parseInt(b.cn,10);
+    var va=isNaN(na)?Infinity:na,vb=isNaN(nb)?Infinity:nb;
+    if(va!==vb)return va-vb;
+    return(a.cn||'').localeCompare(b.cn||'');
+  });
   var venc=purs.filter(function(p){return[p.nf,p.nm,p.nhg].some(function(d){return d&&dDiff(d)<0;});}).length;
   var mans=S.maintenances.filter(function(m){
     if(selId&&m.cid!==selId)return false;
@@ -1458,17 +1878,55 @@ function exportPDF(){
   doc.setTextColor(14,159,110);doc.text(mans.length+' registros',ML+98,42);
   doc.setTextColor(30,30,30);
   if(purs.length>0){
-    doc.setFontSize(10);doc.setFont('helvetica','bold');doc.text('Status dos Purificadores',ML,56);
-    var rows=[];
+    doc.setFontSize(10);doc.setFont('helvetica','bold');doc.text('Purificadores Cadastrados',ML,56);
+    var py=60;
     for(var i=0;i<purs.length;i++){
       var p=purs[i];var co=S.companies.filter(function(x){return x.id===p.cid;})[0];
+      var hasNotes=!!(p.notes&&p.notes.trim());
+      var cardH=hasNotes?38:30;
+      if(py+cardH>285){doc.addPage();py=14;}
+      doc.setFillColor(248,250,252);doc.roundedRect(ML,py,MR-ML,cardH,2,2,'F');
+      doc.setDrawColor(220,220,220);doc.setLineWidth(0.2);doc.roundedRect(ML,py,MR-ML,cardH,2,2,'S');
+      var txtX=ML+4;
+      if(p.photo){
+        try{
+          var fmt2=p.photo.indexOf('data:image/png')===0?'PNG':'JPEG';
+          var imgH=hasNotes?34:24;
+          doc.addImage(p.photo,fmt2,ML+2,py+2,24,imgH);
+          doc.setDrawColor(210,210,210);doc.setLineWidth(0.2);doc.rect(ML+2,py+2,24,imgH);
+          txtX=ML+29;
+        }catch(e){}
+      }
+      doc.setFontSize(8.5);doc.setFont('helvetica','bold');doc.setTextColor(20,20,20);
+      doc.text(esc(p.br||'')+' '+esc(p.mo||''),txtX,py+7);
+      doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(80,80,80);
+      if(co)doc.text('Empresa: '+esc(co.name),txtX,py+12);
+      if(p.loc)doc.text('Local: '+esc(p.loc),txtX,py+17);
+      var infos=[];
+      if(p.cn)infos.push('N\u00b0 Aparelho: '+esc(p.cn));
+      if(p.sn)infos.push('N\u00b0 Serie: '+esc(p.sn));
+      if(p.volt)infos.push('Voltagem: '+esc(p.volt));
+      if(infos.length>0)doc.text(infos.join('   |   '),txtX,py+22);
+      if(hasNotes){
+        doc.setFontSize(6.5);doc.setFont('helvetica','italic');doc.setTextColor(100,100,100);
+        var notesMaxW=(MR-60)-txtX-4;
+        var notesLines=doc.splitTextToSize('Obs: '+p.notes.trim(),notesMaxW);
+        doc.text(notesLines[0]+(notesLines.length>1?'...':''),txtX,py+28);
+        doc.setFont('helvetica','normal');
+      }
       function st(d){return d<0?'VENCIDO':d<=15?d+'d URGENTE':d<=30?d+'d':'OK';}
-      rows.push([co?co.name:'',p.loc||'',esc(p.br||'')+' '+esc(p.mo||''),fmtDate(p.nf)+' '+st(dDiff(p.nf)),fmtDate(p.nm)+' '+st(dDiff(p.nm)),p.nhg?fmtDate(p.nhg)+' '+st(dDiff(p.nhg)):'-']);
+      var statusX=MR-60;
+      doc.setFontSize(6.5);doc.setFont('helvetica','bold');
+      var rC=p.nf?(dDiff(p.nf)<0?[224,36,36]:dDiff(p.nf)<=15?[194,120,3]:[14,159,110]):[150,150,150];
+      doc.setTextColor(rC[0],rC[1],rC[2]);doc.text('Prox. Refil: '+(p.nf?fmtDate(p.nf)+' ('+st(dDiff(p.nf))+')':'-'),statusX,py+13);
+      var hC=p.nhg?(dDiff(p.nhg)<0?[224,36,36]:dDiff(p.nhg)<=15?[194,120,3]:[14,159,110]):[150,150,150];
+      doc.setTextColor(hC[0],hC[1],hC[2]);doc.text('Prox. Higienizacao: '+(p.nhg?fmtDate(p.nhg)+' ('+st(dDiff(p.nhg))+')':'-'),statusX,py+20);
+      doc.setTextColor(30,30,30);
+      py+=cardH+3;
     }
-    doc.autoTable({startY:59,head:[['Empresa','Local','Modelo','Refil','Manutencao','Higienizacao']],body:rows,styles:{fontSize:7,cellPadding:2.5},headStyles:{fillColor:[26,86,219],textColor:255},alternateRowStyles:{fillColor:[248,250,252]},didParseCell:function(d){var t=(d.cell.raw||'')+'';if(t.indexOf('VENCIDO')>=0)d.cell.styles.textColor=[224,36,36];else if(t.indexOf('URGENTE')>=0)d.cell.styles.textColor=[194,120,3];}});
   }
   if(mans.length>0){
-    var y=doc.lastAutoTable?doc.lastAutoTable.finalY+10:60;
+    var y=typeof py!=='undefined'?py+4:60;
     doc.setFontSize(10);doc.setFont('helvetica','bold');doc.setTextColor(30,30,30);
     doc.text('Manutencoes ('+mans.length+')',ML,y);y+=6;
     var TLC={refil:[14,159,110],manutencao:[194,120,3],ocorrencia:[224,36,36],instalacao:[124,58,237],corretiva:[234,88,12],higienizacao:[6,148,162]};
@@ -1525,10 +1983,12 @@ function exportPDF(){
 function render(){
   var root=document.getElementById('root');if(!root)return;
   if(!S.user||S.view==='login'){root.innerHTML=vLogin();return;}
+  var ae=document.activeElement;
+  if(S.modal&&ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA')&&ae.closest&&ae.closest('.modal')){return;}
 
   var activeTab=({cd:'companies',pd:'purifiers'}[S.view])||S.view;
   var canBack=S.view==='cd'||S.view==='pd';
-  var pageTitles={dashboard:'Dashboard',companies:'Empresas',cd:S.selC?S.selC.name:'Empresa',purifiers:'Purificadores',pd:(function(){var p=S.selP;return p?((p.br||'')+' '+(p.mo||'')).trim()||'Purificador':'Purificador';})(),maintenance:'Manutencao',history:'Historico',reports:'Relatorios'};
+  var pageTitles={dashboard:'Dashboard',companies:'Empresas',cd:S.selC?S.selC.name:'Empresa',purifiers:'Purificadores',pd:(function(){var p=S.selP;return p?((p.br||'')+' '+(p.mo||'')).trim()||'Purificador':'Purificador';})(),maintenance:'Manutencao',history:'Historico',reports:'Relatorios',technicians:'Tecnicos',assistencia:'Assistência Técnica'};
 
   var content='';
   if(S.view==='dashboard')content=vDashboard();
@@ -1539,6 +1999,8 @@ function render(){
   else if(S.view==='maintenance')content=vMaintenance();
   else if(S.view==='history')content=vHistory();
   else if(S.view==='reports')content=vReports();
+  else if(S.view==='technicians')content=vTechnicians();
+  else if(S.view==='assistencia')content=vAssistencia();
 
   var alerts=allAlerts();
   var urgentes=alerts.filter(function(a){return a.d<=15;}).length;
@@ -1546,18 +2008,22 @@ function render(){
   var modal='';
   if(S.modal){
     var t=S.modal.t;var d=S.modal.d;
-    var titles={co:d.edit?'Editar empresa':'Nova empresa',pu:d.edit?'Editar purificador':'Novo purificador',ma:'Registrar manutencao',qr:'QR Code'};
+    var titles={co:d.edit?'Editar empresa':'Nova empresa',pu:d.edit?'Editar purificador':'Novo purificador',ma:'Registrar manutencao',qr:'QR Code',te:d.edit?'Editar tecnico':'Novo tecnico',at:d.edit?'Editar OS — Recepção':'Nova OS — Recepção',ator:'Atualizar OS — Técnico'};
     var mb='';
     if(t==='co')mb=mCo(d.edit||null);
     else if(t==='pu')mb=mPu(d.edit||null,d.cid||null);
     else if(t==='ma')mb=mMa(d.pid||null);
     else if(t==='qr')mb=mQR(d.pid||null);
+    else if(t==='te')mb=mTe(d.edit||null);
+    else if(t==='at')mb=mAt(d.edit||null);
+    else if(t==='ator')mb=mAtOrc(d.edit||null);
     modal='<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-hdr"><h2>'+(titles[t]||'')+'</h2><button class="ico-btn" onclick="closeModal()">'+IC.x+'</button></div><div class="modal-body">'+mb+'</div></div></div>';
   }
 
   var sbItems='';
   for(var i=0;i<TABS.length;i++){
     var tab=TABS[i];
+    if(tab==='technicians'&&!isComercial())continue;
     sbItems+='<div class="sb-item'+(activeTab===tab?' active':'')+'" onclick="setTab(\''+tab+'\')">'
       +TAB_ICONS[tab]+'<span>'+TAB_NAMES[tab]+'</span>'
       +(tab==='maintenance'&&urgentes>0?'<span class="sb-badge">'+urgentes+'</span>':'')
@@ -1567,6 +2033,7 @@ function render(){
   var bnav='';
   for(var i=0;i<TABS.length;i++){
     var tab=TABS[i];
+    if(tab==='technicians'&&!isComercial())continue;
     bnav+='<button class="ntab'+(activeTab===tab?' active':'')+'" onclick="setTab(\''+tab+'\')">'
       +TAB_ICONS[tab]
       +(tab==='maintenance'&&urgentes>0?'<span class="notif-badge">'+urgentes+'</span>':'')
