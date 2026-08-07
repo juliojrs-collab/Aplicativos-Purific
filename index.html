@@ -237,16 +237,29 @@ var _FB_DEFAULT={
   appId:"1:132328899335:web:d9e7b99354b51de0a37ba2"
 };
 
+var FB_ERR='';
+var DB_ERR='';
+
 function initFirebase(){
+  var cfg=_FB_DEFAULT;
+  /* localStorage pode lancar excecao (aba anonima, cookies bloqueados, WebView).
+     Isso nao pode derrubar o Firebase: caimos na config padrao. */
   try{
     var saved=localStorage.getItem(FB_KEY);
-    var cfg=saved?JSON.parse(saved):_FB_DEFAULT;
-    if(!cfg.apiKey||!cfg.projectId)return false;
+    if(saved){var pc=JSON.parse(saved);if(pc&&pc.apiKey&&pc.projectId)cfg=pc;}
+  }catch(e){}
+  if(typeof firebase==='undefined'){
+    FB_ERR='As bibliotecas do Firebase nao carregaram. Verifique sua conexao com a internet (ou bloqueio de rede/anuncios) e recarregue a pagina.';
+    return false;
+  }
+  if(!cfg.apiKey||!cfg.projectId){FB_ERR='Configuracao do Firebase incompleta.';return false;}
+  try{
     if(!firebase.apps.length)firebase.initializeApp(cfg);
     db=firebase.firestore();
-    storage=firebase.storage();
-    return true;
-  }catch(e){return false;}
+  }catch(e){FB_ERR='Falha ao iniciar o Firebase: '+e.message;return false;}
+  /* Storage e opcional (so para videos) - nao pode impedir o acesso aos dados. */
+  try{storage=firebase.storage();}catch(e){storage=null;}
+  return true;
 }
 FB_OK=initFirebase();
 
@@ -2030,7 +2043,21 @@ function connectFirebase(){
 
 var unsubs=[];
 var _adminChecked=false;
+
+function dbErr(err,col){
+  var code=err&&err.code||'';
+  if(code==='permission-denied'){
+    DB_ERR='Sem permissao para ler os dados ('+col+'). As regras do Firestore precisam liberar leitura.';
+  }else if(code==='failed-precondition'){
+    DB_ERR='O banco precisa de um indice para "'+col+'". Abra o console do navegador para ver o link de criacao.';
+  }else{
+    DB_ERR='Nao foi possivel conectar ao banco de dados ('+col+'). Verifique sua internet. Detalhe: '+(err&&err.message||code||'desconhecido');
+  }
+  render();
+}
+
 function startListeners(){
+  DB_ERR='';
   for(var i=0;i<unsubs.length;i++)unsubs[i]();unsubs=[];
   var cols=[[COLS.co,'companies'],[COLS.pu,'purifiers'],[COLS.te,'technicians']];
   for(var i=0;i<cols.length;i++){
@@ -2049,18 +2076,26 @@ function startListeners(){
           }
           if(S._waitingLogin&&S.loginPin.length===4){doLogin();return;}
         }
-        S.loaded=true;render();
-      }));
+        S.loaded=true;DB_ERR='';render();
+      },function(err){dbErr(err,key);}));
     })(cols[i][0],cols[i][1]);
   }
   unsubs.push(db.collection(COLS.ma).orderBy('date','desc').onSnapshot(function(snap){
     S.maintenances=snap.docs.map(function(d){var o={id:d.id};var data=d.data();for(var k in data)o[k]=data[k];return o;});
     render();
-  }));
+  },function(err){dbErr(err,'manutencoes');}));
   unsubs.push(db.collection(COLS.at).orderBy('dataEntrada','desc').onSnapshot(function(snap){
     S.assistencias=snap.docs.map(function(d){var o={id:d.id};var data=d.data();for(var k in data)o[k]=data[k];return o;});
     render();
-  }));
+  },function(err){dbErr(err,'assistencias');}));
+}
+
+function retryConn(){
+  DB_ERR='';FB_ERR='';
+  if(!FB_OK){FB_OK=initFirebase();}
+  if(FB_OK&&db){startListeners();showToast('Reconectando...');}
+  else{showToast('Ainda sem conexao');}
+  render();
 }
 
 function exportPDF(){
@@ -2203,6 +2238,24 @@ function exportPDF(){
   doc.save('aquapure-'+today()+'.pdf');showToast('PDF gerado!');
 }
 
+function connBanner(){
+  var msg='',titulo='';
+  if(!FB_OK){
+    titulo='⚠️ Modo demonstracao — seus dados NAO estao sendo exibidos';
+    msg=FB_ERR||'O app nao conseguiu conectar ao banco de dados. As empresas mostradas abaixo sao apenas exemplos.';
+  }else if(DB_ERR){
+    titulo='⚠️ Falha ao carregar os dados';
+    msg=DB_ERR;
+  }else{
+    return '';
+  }
+  return '<div style="background:var(--amber-light);border:1px solid var(--amber);border-radius:var(--r2);padding:12px 14px;margin-bottom:14px;">'
+    +'<div style="font-weight:700;font-size:13px;color:var(--amber);margin-bottom:4px;">'+titulo+'</div>'
+    +'<div style="font-size:12px;color:var(--text2);line-height:1.5;">'+esc(msg)+'</div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="retryConn()" style="margin-top:8px;">🔄 Tentar reconectar</button>'
+    +'</div>';
+}
+
 function render(){
   var root=document.getElementById('root');if(!root)return;
   if(!S.user||S.view==='login'){root.innerHTML=vLogin();return;}
@@ -2280,7 +2333,7 @@ function render(){
     +'<span style="font-size:11px;margin-left:auto;margin-right:8px;color:'+(FB_OK?'var(--green)':'var(--amber)')+';">'+(FB_OK?'🟢 Online':'🟡 Demo')+'</span>'
     +'<button class="btn btn-ghost btn-sm" onclick="logout()" style="display:flex;align-items:center;gap:5px;">'+IC.logout+' Sair</button>'
     +'</div>'
-    +'<div id="content">'+content+'</div>'
+    +'<div id="content">'+connBanner()+content+'</div>'
     +'<div class="bnav">'+bnav+'</div>'
     +'</div></div>'+modal;
 
