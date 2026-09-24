@@ -267,6 +267,17 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 function today(){return new Date().toISOString().split('T')[0];}
 function fmtDate(s){if(!s)return'-';var p=s.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
 function addMon(s,n){if(!s||!n)return'';var d=new Date(s+'T12:00:00');d.setMonth(d.getMonth()+parseInt(n));return d.toISOString().split('T')[0];}
+var INTERVALOS=[1,2,3,4,6,8,12];
+function intervalOpts(v,def){
+  var cur=parseInt(v,10);
+  if(!cur||cur<1)cur=def;
+  var list=INTERVALOS.slice();
+  /* mantem um valor ja salvo que nao esteja na lista, para nao troca-lo sem querer */
+  if(list.indexOf(cur)<0){list.push(cur);list.sort(function(a,b){return a-b;});}
+  return list.map(function(n){
+    return '<option value="'+n+'"'+(cur===n?' selected':'')+'>'+(n===1?'Mensal (1 mes)':n+' meses')+'</option>';
+  }).join('');
+}
 function dDiff(s){if(!s)return 9999;var d=new Date(s+'T12:00:00');var n=new Date();n.setHours(12,0,0,0);return Math.ceil((d-n)/86400000);}
 function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function isMobile(){return window.innerWidth<=1024;}
@@ -1335,10 +1346,10 @@ function mPu(ed,cid){
     +'<div class="field"><label>Voltagem</label><select id="mvolt"><option value=""'+((!p.volt)?' selected':'')+'>Nao informado</option><option value="110V"'+(p.volt==='110V'?' selected':'')+'>110V</option><option value="220V"'+(p.volt==='220V'?' selected':'')+'>220V</option><option value="Bivolt"'+(p.volt==='Bivolt'?' selected':'')+'>Bivolt</option></select></div></div>'
     +'<div class="section-box" style="border-color:var(--green)"><div class="section-box-title" style="color:var(--green)">Troca de Refil</div>'
     +'<div class="g2"><div class="field"><label>Ultimo refil</label><input type="date" id="mlf" value="'+(p.lf||today())+'"/></div>'
-    +'<div class="field"><label>Intervalo</label><select id="mfim"><option value="3"'+(parseInt(p.fim)===3?' selected':'')+'>3 meses</option><option value="4"'+(parseInt(p.fim)===4?' selected':'')+'>4 meses</option><option value="6"'+((!p.fim||parseInt(p.fim)===6)?' selected':'')+'>6 meses</option><option value="8"'+(parseInt(p.fim)===8?' selected':'')+'>8 meses</option><option value="12"'+(parseInt(p.fim)===12?' selected':'')+'>12 meses</option></select></div></div></div>'
+    +'<div class="field"><label>Intervalo</label><select id="mfim">'+intervalOpts(p.fim,6)+'</select></div></div></div>'
     +'<div class="section-box" style="border-color:var(--teal)"><div class="section-box-title" style="color:var(--teal)">Higienizacao</div>'
     +'<div class="g2"><div class="field"><label>Ultima higieniz.</label><input type="date" id="mlhg" value="'+(p.lhg||'')+'"/></div>'
-    +'<div class="field"><label>Intervalo</label><select id="mnhgI"><option value="3"'+(parseInt(p.nhgI)===3?' selected':'')+'>3 meses</option><option value="4"'+(parseInt(p.nhgI)===4?' selected':'')+'>4 meses</option><option value="6"'+(parseInt(p.nhgI)===6?' selected':'')+'>6 meses</option><option value="8"'+(parseInt(p.nhgI)===8?' selected':'')+'>8 meses</option><option value="12"'+((!p.nhgI||parseInt(p.nhgI)===12)?' selected':'')+'>12 meses</option></select></div></div></div>'
+    +'<div class="field"><label>Intervalo</label><select id="mnhgI">'+intervalOpts(p.nhgI,12)+'</select></div></div></div>'
     +(ed?'<div class="toggle-row"><div><div class="toggle-lbl" id="toggle-lbl">'+(inactive?'Inativo':'Ativo')+'</div><div class="toggle-sub">'+(inactive?'Pausado':'Em operacao')+'</div></div><label class="toggle-sw"><input type="checkbox" id="minactive" '+(inactive?'':'checked')+' onchange="document.getElementById(\'toggle-lbl\').textContent=this.checked?\'Ativo\':\'Inativo\'"><span class="sl"></span></label></div>':'')
     +'<div class="field"><label>Observacoes</label><textarea id="mnotes">'+esc(p.notes||'')+'</textarea></div>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="svP(\''+(ed?ed.id:'')+'\',\''+(dc||p.cid||'')+'\')">Salvar</button></div>';
