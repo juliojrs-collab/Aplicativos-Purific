@@ -1902,8 +1902,8 @@ function exportAtPDF(id){
   if(typeof window.jspdf==='undefined'){showToast('PDF indisponivel');return;}
   showToast('Gerando PDF...');
   var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF();
-  var PW=210,ML=14,MR=196;
-  function chk(need){if(y+need>285){doc.addPage();y=14;}}
+  var PW=210,ML=14,MR=196,nowStr=new Date().toLocaleDateString('pt-BR');
+  function chk(need){if(y+need>272){y=pdfNovaPagina(doc);doc.setFontSize(8.5);}}
   function line(lbl,val){
     if(!val)return;
     chk(6);
@@ -1913,16 +1913,22 @@ function exportAtPDF(id){
     doc.text(lines,ML+45,y);
     y+=lines.length*4.5+1.5;
   }
-  function section(t){chk(12);y+=3;doc.setFillColor(235,243,255);doc.rect(ML,y-4.5,MR-ML,7,'F');doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(26,86,219);doc.text(t,ML+2,y);doc.setTextColor(30,30,30);doc.setFontSize(8.5);y+=7;}
-  doc.setFillColor(26,86,219);doc.rect(0,0,PW,26,'F');
-  doc.setTextColor(255,255,255);doc.setFontSize(15);doc.setFont('helvetica','bold');
-  doc.text('AquaPure - Ordem de Serviço',ML,11);
-  doc.setFontSize(9);doc.setFont('helvetica','normal');
-  doc.text((a.numeroOS?'OS N° '+a.numeroOS+'  |  ':'')+'Entrada: '+fmtDate(a.dataEntrada)+'  |  Gerado em: '+new Date().toLocaleDateString('pt-BR'),ML,19);
-  doc.setTextColor(30,30,30);doc.setFontSize(8.5);
-  var y=34;
+  function section(t){
+    chk(12);y+=3;
+    var az=PURIFIC.azul;
+    doc.setFillColor(240,247,250);doc.rect(ML,y-4.5,MR-ML,7,'F');
+    doc.setFillColor(az[0],az[1],az[2]);doc.rect(ML,y-4.5,1.6,7,'F');
+    doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(az[0],az[1],az[2]);
+    doc.text(t,ML+4,y);
+    doc.setTextColor(30,30,30);doc.setFontSize(8.5);y+=7;
+  }
   var sb=atStatusBadge(a.status);
-  line('Status',sb.t);
+  var y=pdfCabecalho(doc,'ORDEM DE SERVIÇO','Assistência Técnica',[
+    ['N° OS',a.numeroOS||'-'],
+    ['Entrada',fmtDate(a.dataEntrada)],
+    ['Status',sb.t]
+  ]);
+  doc.setFontSize(8.5);
   section('Recepção');
   line('Cliente',a.nomeCliente);
   line('Telefone',a.telefoneCliente);
@@ -1957,8 +1963,9 @@ function exportAtPDF(id){
   if(a.videosEntrada&&a.videosEntrada.length){
     chk(8);doc.setFont('helvetica','bold');doc.text('Vídeos:',ML,y);doc.setFont('helvetica','normal');
     for(var v=0;v<a.videosEntrada.length;v++){
-      chk(5);doc.setTextColor(26,86,219);
-      doc.textWithLink('🎬 '+(a.videosEntrada[v].name||'Vídeo '+(v+1)),ML+16,y,{url:a.videosEntrada[v].url});
+      chk(5);doc.setTextColor(PURIFIC.azul[0],PURIFIC.azul[1],PURIFIC.azul[2]);
+      /* sem emoji: as fontes padrao do jsPDF nao suportam e imprimem lixo */
+      doc.textWithLink('• '+(a.videosEntrada[v].name||'Vídeo '+(v+1)),ML+16,y,{url:a.videosEntrada[v].url});
       doc.setTextColor(30,30,30);y+=5;
     }
   }
@@ -1969,10 +1976,18 @@ function exportAtPDF(id){
   line('Peças necessárias',a.pecasNecessarias);
   line('Mão de obra','R$ '+(a.valorMaoObra||0).toFixed(2));
   line('Peças','R$ '+(a.valorPecas||0).toFixed(2));
-  chk(8);doc.setFont('helvetica','bold');doc.setFontSize(10);
-  doc.text('TOTAL: R$ '+(a.valorTotal||0).toFixed(2),ML,y);y+=6;doc.setFontSize(8.5);
+  chk(10);y+=1;
+  var az=PURIFIC.azul;
+  doc.setFillColor(240,247,250);doc.setDrawColor(az[0],az[1],az[2]);doc.setLineWidth(0.4);
+  doc.roundedRect(ML,y-5,MR-ML,10,1.5,1.5,'FD');
+  doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.setTextColor(az[0],az[1],az[2]);
+  doc.text('VALOR TOTAL',ML+4,y+1.5);
+  doc.text('R$ '+(a.valorTotal||0).toFixed(2),MR-4,y+1.5,{align:'right'});
+  doc.setTextColor(30,30,30);doc.setFont('helvetica','normal');doc.setFontSize(8.5);y+=10;
   line('Observações técnicas',a.observacoesTecnicas);
-  doc.save('OS-'+(a.numeroOS||a.id)+'.pdf');showToast('PDF gerado!');
+  pdfAssinatura(doc,y);
+  pdfRodape(doc,nowStr);
+  doc.save('purific-OS-'+(a.numeroOS||a.id)+'.pdf');showToast('PDF gerado!');
 }
 
 function exportAtDoc(id){
@@ -1989,11 +2004,23 @@ function exportAtDoc(id){
     a.videosEntrada.forEach(function(v,ix){vidsHtml+='<li><a href="'+v.url+'">'+esc(v.name||'Vídeo '+(ix+1))+'</a></li>';});
     vidsHtml+='</ul>';
   }
+  var AZ='#0C85AA', VD='#0BA39B';
   var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>OS '+esc(a.numeroOS||'')+'</title></head>'
     +'<body style="font-family:Arial,sans-serif;font-size:12pt;">'
-    +'<div style="background:#1a56db;color:#fff;padding:14px 18px;"><h1 style="margin:0;font-size:18pt;">AquaPure — Ordem de Serviço</h1>'
-    +'<p style="margin:4px 0 0;font-size:10pt;">'+(a.numeroOS?'OS N° '+esc(a.numeroOS)+' &nbsp;|&nbsp; ':'')+'Entrada: '+fmtDate(a.dataEntrada)+' &nbsp;|&nbsp; Status: '+esc(sb.t)+'</p></div>'
-    +'<h2 style="color:#1a56db;font-size:13pt;">Recepção</h2>'
+    +'<table width="100%" style="border-collapse:collapse;"><tr>'
+    +'<td style="vertical-align:middle;"><img src="'+LOGO_PURIFIC+'" width="190"/></td>'
+    +'<td style="text-align:right;vertical-align:middle;">'
+    +'<div style="color:'+AZ+';font-size:17pt;font-weight:bold;letter-spacing:1px;">ORDEM DE SERVIÇO</div>'
+    +'<div style="color:#777;font-size:9pt;">Assistência Técnica</div>'
+    +'<div style="color:#888;font-size:8.5pt;">'+PURIFIC.nome+' &nbsp;·&nbsp; CNPJ '+PURIFIC.cnpj+'</div>'
+    +'</td></tr></table>'
+    +'<div style="border-bottom:3px solid '+AZ+';margin:6px 0 0;"></div>'
+    +'<table width="100%" style="border-collapse:collapse;background:#F0F7FA;margin-top:10px;"><tr>'
+    +'<td style="padding:8px 12px;font-size:9pt;"><b style="color:'+AZ+';font-size:7.5pt;">N° OS</b><br>'+esc(a.numeroOS||'-')+'</td>'
+    +'<td style="padding:8px 12px;font-size:9pt;"><b style="color:'+AZ+';font-size:7.5pt;">ENTRADA</b><br>'+fmtDate(a.dataEntrada)+'</td>'
+    +'<td style="padding:8px 12px;font-size:9pt;"><b style="color:'+AZ+';font-size:7.5pt;">STATUS</b><br>'+esc(sb.t)+'</td>'
+    +'</tr></table>'
+    +'<h2 style="color:'+AZ+';font-size:13pt;">Recepção</h2>'
     +'<table style="border-collapse:collapse;width:100%;font-size:10pt;">'
     +row('Cliente',a.nomeCliente)
     +row('Telefone',a.telefoneCliente)
@@ -2006,7 +2033,7 @@ function exportAtDoc(id){
     +'</table>'
     +(fotosHtml?'<p><b>Fotos de entrada:</b></p><p>'+fotosHtml+'</p>':'')
     +vidsHtml
-    +'<h2 style="color:#1a56db;font-size:13pt;">Avaliação Técnica / Orçamento</h2>'
+    +'<h2 style="color:'+AZ+';font-size:13pt;">Avaliação Técnica / Orçamento</h2>'
     +'<table style="border-collapse:collapse;width:100%;font-size:10pt;">'
     +row('Técnico',a.tecnicoResponsavel)
     +row('Diagnóstico',a.diagnostico)
@@ -2017,7 +2044,19 @@ function exportAtDoc(id){
     +row('TOTAL','R$ '+(a.valorTotal||0).toFixed(2))
     +row('Observações técnicas',a.observacoesTecnicas)
     +'</table>'
-    +'<p style="font-size:9pt;color:#888;margin-top:24px;">Gerado em '+new Date().toLocaleString('pt-BR')+' — AquaPure</p>'
+    +'<table width="100%" style="border-collapse:collapse;border:1px solid #D7DEE2;margin-top:28px;"><tr><td style="padding:14px 18px;">'
+    +'<div style="font-size:9pt;color:#6E6E6E;">Sorocaba/SP, '+dataExtenso(new Date())+'</div>'
+    +'<div style="text-align:center;margin-top:26px;">'
+    +'<div style="border-top:1px solid #464646;width:300px;margin:0 auto;"></div>'
+    +'<div style="color:'+AZ+';font-weight:bold;font-size:11pt;margin-top:4px;">'+PURIFIC.nome+'</div>'
+    +'<div style="font-size:9pt;color:#5A5A5A;">CNPJ: '+PURIFIC.cnpj+'</div>'
+    +'<div style="font-size:8pt;color:#8C8C8C;">Responsável Técnico</div>'
+    +'</div></td></tr></table>'
+    +'<div style="border-top:2px solid '+AZ+';margin-top:26px;padding-top:8px;text-align:center;">'
+    +'<div style="color:'+AZ+';font-weight:bold;font-size:9pt;">'+PURIFIC.nome+' &nbsp;·&nbsp; CNPJ '+PURIFIC.cnpj+'</div>'
+    +'<div style="color:#6E6E6E;font-size:8.5pt;">'+PURIFIC.endereco+' &nbsp;·&nbsp; Tel. '+PURIFIC.tel+' &nbsp;·&nbsp; WhatsApp '+PURIFIC.whats+'</div>'
+    +'<div style="color:#A5A5A5;font-size:7.5pt;margin-top:3px;">Emitido em '+new Date().toLocaleString('pt-BR')+'</div>'
+    +'</div>'
     +'</body></html>';
   var blob=new Blob(['﻿'+html],{type:'application/msword'});
   var link=document.createElement('a');
