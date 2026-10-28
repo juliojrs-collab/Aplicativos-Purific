@@ -223,7 +223,7 @@ tr:hover td{background:#fafbfc;}
 <script>
 var FB_KEY='aq_fb_config';
 var SESS_KEY='aq_session';
-var COLS={co:'companies',pu:'purifiers',ma:'maintenances',te:'technicians',at:'assistencias'};
+var COLS={co:'companies',pu:'purifiers',ma:'maintenances',te:'technicians',at:'assistencias',ph:'photos'};
 var db=null;
 var storage=null;
 var FB_OK=false;
@@ -256,6 +256,9 @@ function initFirebase(){
   try{
     if(!firebase.apps.length)firebase.initializeApp(cfg);
     db=firebase.firestore();
+    /* cache local: nas aberturas seguintes os dados vem do proprio aparelho
+       e so as mudancas sao baixadas. Falha em aba anonima - nao e critico. */
+    try{db.enablePersistence({synchronizeTabs:true}).catch(function(){});}catch(e){}
   }catch(e){FB_ERR='Falha ao iniciar o Firebase: '+e.message;return false;}
   /* Storage e opcional (so para videos) - nao pode impedir o acesso aos dados. */
   try{storage=firebase.storage();}catch(e){storage=null;}
@@ -324,6 +327,35 @@ function allAlerts(){
 
 var _photos={before:[],after:[]};
 var _purPhoto='';
+
+/* ===== Fotos dos purificadores =====
+   Ficam na colecao 'photos' (1 doc por purificador), fora do documento do
+   purificador. Assim a lista de purificadores e leve e a foto so e baixada
+   quando aparece na tela ou vai para o PDF. Fotos antigas, ainda gravadas
+   dentro do proprio purificador (campo photo), continuam funcionando. */
+var _fotoCache={};
+function getFoto(pid,cb){
+  if(!pid){cb('');return;}
+  if(_fotoCache[pid]!==undefined){cb(_fotoCache[pid]);return;}
+  var p=S.purifiers.filter(function(x){return x.id===pid;})[0];
+  if(p&&p.photo){_fotoCache[pid]=p.photo;cb(p.photo);return;}   /* formato antigo */
+  if(!FB_OK||!db){cb('');return;}
+  db.collection(COLS.ph).doc(pid).get().then(function(d){
+    var b=d.exists?(d.data().b64||''):'';
+    _fotoCache[pid]=b;cb(b);
+  }).catch(function(){cb('');});
+}
+function temFoto(p){return !!(p&&(p.hasPhoto||p.photo));}
+/* injeta a foto no elemento assim que ela chega */
+function carregarFotoEm(elId,pid){
+  getFoto(pid,function(b64){
+    var el=document.getElementById(elId);
+    if(!el)return;
+    el.innerHTML=b64
+      ?'<img src="'+b64+'" style="width:100%;border-radius:8px;object-fit:contain;background:#f8fafc;margin-bottom:12px;display:block;"/>'
+      :'';
+  });
+}
 var _atPhotos=[];
 var _atVideos=[];
 var AT_QUESTIONS='1- Quanto tempo tem o purificador?\n2- O purificador está vazando?\n3- O purificador está gelando normalmente?\n4- Quanto tempo de uso tem o refil?\n5- Modelo/marca do refil?\n6- A água utilizada é da caixa ou da rua?\n7- Já foi realizada alguma manutenção anterior no purificador?';
@@ -656,7 +688,20 @@ function openModal(t,d){
   d=d||{};
   S.modal={t:t,d:d};
   if(t==='ma'){_photos={before:[],after:[]};S.maCid='';S.maPid='';}
-  if(t==='pu')_purPhoto=(d.edit&&d.edit.photo)||'';
+  if(t==='pu'){
+    var ped=d.edit;
+    _purPhoto=(ped&&(ped.photo||_fotoCache[ped.id]))||'';
+    /* foto na colecao separada: busca e preenche o preview quando chegar */
+    if(ped&&!_purPhoto&&temFoto(ped)){
+      getFoto(ped.id,function(b64){
+        if(!b64)return;
+        _purPhoto=b64;
+        var prev=document.getElementById('pur-photo-prev');
+        if(prev)prev.innerHTML='<img src="'+b64+'" style="width:100%;border-radius:8px;object-fit:contain;background:#f8fafc;margin-bottom:6px;display:block;"/>'
+          +'<button class="btn btn-ghost btn-sm" onclick="removePurPhoto()">🗑 Remover foto</button>';
+      });
+    }
+  }
   if(t==='at'){
     var ed=d.edit;
     _atPhotos=ed?((ed.fotosEntrada&&ed.fotosEntrada.slice())||(ed.fotoEntrada?[ed.fotoEntrada]:[])):[];
@@ -979,7 +1024,12 @@ function vPD(){
 
   html+='<div class="'+(isMobile()?'':'detail-grid')+'">';
   html+='<div><div class="card">';
-  if(p.photo)html+='<img src="'+p.photo+'" style="width:100%;border-radius:8px;object-fit:contain;background:#f8fafc;margin-bottom:12px;display:block;"/>';
+  if(temFoto(p)){
+    html+='<div id="pd-foto">'+(_fotoCache[p.id]
+      ?'<img src="'+_fotoCache[p.id]+'" style="width:100%;border-radius:8px;object-fit:contain;background:#f8fafc;margin-bottom:12px;display:block;"/>'
+      :'<div style="background:var(--surface2);border-radius:8px;padding:28px;text-align:center;color:var(--text3);font-size:12px;margin-bottom:12px;">Carregando foto...</div>')+'</div>';
+    if(_fotoCache[p.id]===undefined)setTimeout(function(){carregarFotoEm('pd-foto',p.id);},0);
+  }
   html+='<div class="row"><div><div class="card-title">'+esc(p.br||'')+' '+esc(p.mo||'')+'</div><div class="card-sub">'+(c?esc(c.name):'')+'</div></div>'
     +'<div class="actions-cell">'
     +'<button class="ico-btn" onclick="openModal(\'qr\',{pid:\''+p.id+'\'})">'+IC.qr+'</button>'
@@ -1562,6 +1612,8 @@ function delC(id){
   var pids=S.purifiers.filter(function(p){return p.cid===id;}).map(function(p){return p.id;});
   for(var i=0;i<pids.length;i++){
     batch.delete(db.collection(COLS.pu).doc(pids[i]));
+    batch.delete(db.collection(COLS.ph).doc(pids[i]));
+    delete _fotoCache[pids[i]];
     var mids=S.maintenances.filter(function(m){return m.pid===pids[i];}).map(function(m){return m.id;});
     for(var j=0;j<mids.length;j++)batch.delete(db.collection(COLS.ma).doc(mids[j]));
   }
@@ -1581,15 +1633,32 @@ function svP(eid,cidArg){
   var nhgI=parseInt(document.getElementById('mnhgI')?document.getElementById('mnhgI').value:12)||12;
   var activeToggle=document.getElementById('minactive');
   var inactive=eid?(activeToggle?!activeToggle.checked:false):false;
-  var existingPhoto=eid?(S.purifiers.filter(function(x){return x.id===eid;})[0]||{}).photo||'':'';
+  var existingPhoto=eid?((S.purifiers.filter(function(x){return x.id===eid;})[0]||{}).photo||_fotoCache[eid]||''):'';
   var it={cid:cid,cn:document.getElementById('mcn')?document.getElementById('mcn').value:'',sn:document.getElementById('msn')?document.getElementById('msn').value:'',br:br,mo:mo,loc:document.getElementById('mloc')?document.getElementById('mloc').value:'',rfm:document.getElementById('mrfm')?document.getElementById('mrfm').value:'',volt:document.getElementById('mvolt')?document.getElementById('mvolt').value:'',ins:document.getElementById('mins')?document.getElementById('mins').value:today(),lf:lf,fim:fim,nf:addMon(lf,fim),lhg:lhg,nhgI:nhgI,nhg:lhg?addMon(lhg,nhgI):'',notes:document.getElementById('mnotes')?document.getElementById('mnotes').value:'',inactive:inactive,photo:_purPhoto||existingPhoto};
   if(!FB_OK||!db){
     if(eid){for(var i=0;i<S.purifiers.length;i++)if(S.purifiers[i].id===eid){for(var k in it)S.purifiers[i][k]=it[k];break;}}
     else{it.id=uid();S.purifiers.push(it);}
     showToast(eid?'Purificador atualizado!':'Purificador cadastrado!');closeModal();render();return;
   }
-  if(eid)db.collection(COLS.pu).doc(eid).update(it).then(function(){showToast('Purificador salvo!');closeModal();}).catch(function(e){alert('Erro: '+e.message);});
-  else db.collection(COLS.pu).add(it).then(function(){showToast('Purificador salvo!');closeModal();}).catch(function(e){alert('Erro: '+e.message);});
+  /* a foto vai para a colecao 'photos', fora do documento do purificador */
+  var foto=it.photo; delete it.photo;
+  it.hasPhoto=!!foto;
+  function gravarFoto(pid){
+    _fotoCache[pid]=foto;
+    if(!foto)return db.collection(COLS.ph).doc(pid).delete().catch(function(){});
+    return db.collection(COLS.ph).doc(pid).set({b64:foto,updatedAt:new Date().toISOString()});
+  }
+  if(eid){
+    db.collection(COLS.pu).doc(eid).update(it)
+      .then(function(){return gravarFoto(eid);})
+      .then(function(){showToast('Purificador salvo!');closeModal();})
+      .catch(function(e){alert('Erro: '+e.message);});
+  }else{
+    db.collection(COLS.pu).add(it)
+      .then(function(ref){return gravarFoto(ref.id);})
+      .then(function(){showToast('Purificador salvo!');closeModal();})
+      .catch(function(e){alert('Erro: '+e.message);});
+  }
 }
 
 function delP(id){
@@ -1602,6 +1671,8 @@ function delP(id){
   }
   var batch=db.batch();
   batch.delete(db.collection(COLS.pu).doc(id));
+  batch.delete(db.collection(COLS.ph).doc(id));
+  delete _fotoCache[id];
   var mids=S.maintenances.filter(function(m){return m.pid===id;}).map(function(m){return m.id;});
   for(var i=0;i<mids.length;i++)batch.delete(db.collection(COLS.ma).doc(mids[i]));
   batch.commit().then(function(){if(S.view==='pd')goBack();else render();showToast('Purificador excluido');}).catch(function(e){alert('Erro: '+e.message);});
@@ -2278,8 +2349,26 @@ function pdfRodape(doc,nowStr){
   }
 }
 
+function fotoDe(p){return (p&&(p.photo||_fotoCache[p.id]))||'';}
+
+/* busca as fotos que faltam antes de montar o PDF */
 function exportPDF(){
   if(typeof window.jspdf==='undefined'){showToast('PDF indisponivel');return;}
+  var selId=(document.getElementById('rc')||{}).value||'';
+  var purs=(selId?S.purifiers.filter(function(p){return p.cid===selId;}):S.purifiers).filter(function(p){return!p.inactive;});
+  var faltam=purs.filter(function(p){return temFoto(p)&&_fotoCache[p.id]===undefined&&!p.photo;});
+  if(!faltam.length){exportPDFInterno();return;}
+  showToast('Carregando '+faltam.length+' foto(s)...');
+  var n=0;
+  faltam.forEach(function(p){
+    getFoto(p.id,function(b64){
+      if(_fotoCache[p.id]===undefined)_fotoCache[p.id]=b64||'';
+      if(++n===faltam.length)exportPDFInterno();
+    });
+  });
+}
+
+function exportPDFInterno(){
   showToast('Gerando PDF...');
   var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF();
   var PW=210,ML=14,MR=196,nowStr=new Date().toLocaleDateString('pt-BR');
@@ -2326,11 +2415,12 @@ function exportPDF(){
       doc.setFillColor(248,250,252);doc.roundedRect(ML,py,MR-ML,cardH,2,2,'F');
       doc.setDrawColor(220,220,220);doc.setLineWidth(0.2);doc.roundedRect(ML,py,MR-ML,cardH,2,2,'S');
       var txtX=ML+4;
-      if(p.photo){
+      var fotoP=fotoDe(p);
+      if(fotoP){
         try{
-          var fmt2=p.photo.indexOf('data:image/png')===0?'PNG':'JPEG';
+          var fmt2=fotoP.indexOf('data:image/png')===0?'PNG':'JPEG';
           var imgH=hasNotes?34:24;
-          doc.addImage(p.photo,fmt2,ML+2,py+2,24,imgH);
+          doc.addImage(fotoP,fmt2,ML+2,py+2,24,imgH);
           doc.setDrawColor(210,210,210);doc.setLineWidth(0.2);doc.rect(ML+2,py+2,24,imgH);
           txtX=ML+29;
         }catch(e){}
