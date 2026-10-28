@@ -2410,7 +2410,16 @@ function exportPDFInterno(){
     for(var i=0;i<purs.length;i++){
       var p=purs[i];var co=S.companies.filter(function(x){return x.id===p.cid;})[0];
       var hasNotes=!!(p.notes&&p.notes.trim());
-      var cardH=hasNotes?38:30;
+      /* observacao completa: quebra em varias linhas e o card cresce junto */
+      var notesLines=[];
+      if(hasNotes){
+        doc.setFontSize(6.5);doc.setFont('helvetica','italic');
+        var notesX=fotoDe(p)?ML+29:ML+4;
+        notesLines=doc.splitTextToSize('Obs: '+p.notes.trim(),MR-4-notesX);
+        if(notesLines.length>8){notesLines=notesLines.slice(0,8);notesLines[7]+=' ...';}
+        doc.setFont('helvetica','normal');
+      }
+      var cardH=hasNotes?Math.max(30,25+notesLines.length*3.3+2):30;
       if(py+cardH>274){py=pdfNovaPagina(doc);}
       doc.setFillColor(248,250,252);doc.roundedRect(ML,py,MR-ML,cardH,2,2,'F');
       doc.setDrawColor(220,220,220);doc.setLineWidth(0.2);doc.roundedRect(ML,py,MR-ML,cardH,2,2,'S');
@@ -2419,7 +2428,7 @@ function exportPDFInterno(){
       if(fotoP){
         try{
           var fmt2=fotoP.indexOf('data:image/png')===0?'PNG':'JPEG';
-          var imgH=hasNotes?34:24;
+          var imgH=Math.max(24,Math.min(cardH-4,38));
           doc.addImage(fotoP,fmt2,ML+2,py+2,24,imgH);
           doc.setDrawColor(210,210,210);doc.setLineWidth(0.2);doc.rect(ML+2,py+2,24,imgH);
           txtX=ML+29;
@@ -2437,9 +2446,7 @@ function exportPDFInterno(){
       if(infos.length>0)doc.text(infos.join('   |   '),txtX,py+22);
       if(hasNotes){
         doc.setFontSize(6.5);doc.setFont('helvetica','italic');doc.setTextColor(100,100,100);
-        var notesMaxW=(MR-60)-txtX-4;
-        var notesLines=doc.splitTextToSize('Obs: '+p.notes.trim(),notesMaxW);
-        doc.text(notesLines[0]+(notesLines.length>1?'...':''),txtX,py+28);
+        doc.text(notesLines,txtX,py+27);
         doc.setFont('helvetica','normal');
       }
       function st(d){return d<0?'VENCIDO':d<=15?d+'d URGENTE':d<=30?d+'d':'OK';}
